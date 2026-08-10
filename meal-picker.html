@@ -1,0 +1,1763 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+<title>這餐吃什麼</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    background: #15171C;
+    color: #F3ECDD;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", "Heiti TC", sans-serif;
+  }
+  .mono { font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; }
+  .wrap {
+    min-height: 100vh;
+    background: radial-gradient(1200px 600px at 50% -10%, #262B36 0%, #1B1E24 55%, #15171C 100%);
+    padding: 20px 16px calc(84px + env(safe-area-inset-bottom));
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .header { width: 100%; max-width: 560px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .headerLeft { display: flex; align-items: center; gap: 10px; }
+  .backBtn { background: none; border: none; color: #C99A3D; font-size: 20px; cursor: pointer; padding: 4px 6px 4px 0; }
+  .title { font-weight: 900; font-size: 22px; letter-spacing: 0.02em; }
+  .title small { display: block; font-size: 11px; letter-spacing: 0.12em; color: #8F97A8; margin-top: 4px; font-weight: 400; }
+  .addBtn {
+    background: #5C7A6B; color: #F3ECDD; border: none; border-radius: 999px;
+    width: 38px; height: 38px; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.35); font-size: 19px;
+  }
+
+  /* Bottom tab bar */
+  .tabbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 200;
+    background: #1B1E24; border-top: 1px solid #2E333F;
+    display: flex; padding: 6px 4px calc(6px + env(safe-area-inset-bottom));
+  }
+  .tabBtn {
+    flex: 1; background: none; border: none; color: #6C7383; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 1px;
+    font-size: 9.5px; letter-spacing: 0.02em; border-radius: 8px;
+  }
+  .tabBtn .ic { font-size: 18px; }
+  .tabBtn.active { color: #C99A3D; }
+
+  .card { width: 100%; max-width: 560px; }
+  .sectionLabel { font-size: 11px; letter-spacing: 0.12em; color: #6C7383; margin: 4px 0 9px; }
+  .filterGroupLabel { font-size: 10.5px; letter-spacing: 0.1em; color: #545B68; margin: 2px 0 6px; }
+
+  /* Ticket */
+  .ticketStage { width: 100%; max-width: 380px; margin: 0 auto 16px; }
+  .ticket {
+    background: #F3ECDD; color: #232019; border-radius: 4px; position: relative;
+    padding: 22px 20px 26px; box-shadow: 0 20px 40px rgba(0,0,0,0.45);
+    clip-path: polygon(0% 0%,100% 0%,100% 92%,96% 100%,92% 92%,88% 100%,84% 92%,80% 100%,76% 92%,72% 100%,68% 92%,64% 100%,60% 92%,56% 100%,52% 92%,48% 100%,44% 92%,40% 100%,36% 92%,32% 100%,28% 92%,24% 100%,20% 92%,16% 100%,12% 92%,8% 100%,4% 92%,0% 100%);
+  }
+  .ticketTop { display: flex; justify-content: space-between; font-size: 11px; letter-spacing: 0.1em; color: #7A7263; border-bottom: 1px dashed #C9BFA5; padding-bottom: 8px; margin-bottom: 12px; }
+  .ticketLabel { font-size: 13px; color: #8A6A2A; letter-spacing: 0.1em; margin-bottom: 6px; font-weight: 700; }
+  .ticketName { font-weight: 900; font-size: 26px; line-height: 1.25; margin-bottom: 8px; word-break: break-word; }
+  .ticketMeta { font-size: 12px; color: #5C7A6B; margin-bottom: 4px; }
+  .ticketNote { font-size: 13px; color: #6B6252; margin-top: 9px; border-top: 1px dashed #C9BFA5; padding-top: 8px; }
+  .ticketWho { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 9px; }
+  .whoTag { font-size: 11px; padding: 3px 8px; border-radius: 999px; color: #F3ECDD; }
+  .stamp { position: absolute; top: 16px; right: 18px; border: 2.5px solid #B23A2E; color: #B23A2E; font-weight: 700; font-size: 11px; padding: 4px 7px; border-radius: 6px; transform: rotate(9deg); }
+  .comingSoon { display: inline-block; background: #3A3F4C; color: #8F97A8; font-size: 10px; padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.04em; }
+  .ticketEmpty { text-align: center; padding: 22px 6px 14px; color: #7A7263; font-size: 14px; }
+  .ticketEmpty .big { font-size: 30px; display: block; margin-bottom: 8px; }
+
+  .primaryBtn {
+    width: 100%; max-width: 380px; background: #B23A2E; color: #F3ECDD; border: none;
+    padding: 13px; border-radius: 8px; font-size: 15px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer;
+    box-shadow: 0 8px 20px rgba(178,58,46,0.3); margin: 0 auto 20px;
+  }
+  .primaryBtn:disabled { opacity: 0.35; box-shadow: none; }
+  .ghostBtn {
+    background: transparent; border: 1px solid #3A3F4C; color: #B7BECB;
+    padding: 7px 13px; border-radius: 999px; font-size: 12.5px; cursor: pointer;
+  }
+  .bigChoiceBtn {
+    width: 100%; max-width: 480px; background: #20232B; border: 1px solid #2E333F; color: #F3ECDD;
+    padding: 18px; border-radius: 12px; text-align: left; cursor: pointer; margin-bottom: 12px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .bigChoiceBtn .bcTitle { font-weight: 700; font-size: 15.5px; }
+  .bigChoiceBtn .bcDesc { font-size: 12px; color: #8F97A8; }
+  .bigChoiceBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Map board */
+  .mapWrap { width: 100%; max-width: 560px; margin-bottom: 16px; border-radius: 12px; overflow: hidden; border: 1px solid #2E333F; }
+  .board { position: relative; height: 320px; width: 100%; background-color: #1E2530;
+    background-image: linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+    background-size: 28px 28px; cursor: crosshair; overflow: hidden; }
+  .compass { position: absolute; top: 10px; right: 12px; font-size: 11px; color: #5C6473; letter-spacing: 0.1em; pointer-events: none; }
+  .pin { position: absolute; width: 17px; height: 17px; margin-left: -8px; margin-top: -17px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 2px solid #F3ECDD; box-shadow: 0 2px 6px rgba(0,0,0,0.5); cursor: pointer; }
+  .mapHint { background: #20232B; color: #8F97A8; font-size: 12px; padding: 9px 12px; border-top: 1px solid #2E333F; }
+  .pinPopover { position: absolute; z-index: 50; background: #F3ECDD; color: #232019; border-radius: 10px; padding: 10px 12px; min-width: 150px; box-shadow: 0 10px 24px rgba(0,0,0,0.4); transform: translate(-50%, -100%); margin-top: -26px; }
+  .pinPopover .pName { font-weight: 700; font-size: 14px; }
+  .pinPopover .pMeta { font-size: 11px; color: #5C7A6B; margin: 2px 0 8px; }
+  .pinPopover .pBtns { display: flex; gap: 6px; }
+  .pinPopover button { border: 1px solid #C9BFA5; background: #FFFDF7; border-radius: 6px; padding: 4px 8px; font-size: 12px; cursor: pointer; }
+  .pinPopover .closeX { position: absolute; top: 4px; right: 6px; border: none; background: none; font-size: 12px; color: #7A7263; }
+  .shareNote { width: 100%; max-width: 560px; background: #20232B; border: 1px solid #2E333F; border-radius: 10px; padding: 12px 14px; font-size: 12.5px; color: #B7BECB; line-height: 1.6; margin-bottom: 16px; }
+  .shareNote b { color: #C99A3D; }
+
+  /* Filters / chips */
+  .filters { width: 100%; max-width: 560px; display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .chip { flex-shrink: 0; background: transparent; border: 1px solid #3A3F4C; color: #B7BECB; padding: 7px 13px; border-radius: 999px; font-size: 13px; cursor: pointer; }
+  .chip.active { background: #C99A3D; border-color: #C99A3D; color: #201804; font-weight: 700; }
+  .chip.excl { background: #B23A2E; border-color: #B23A2E; color: #F3ECDD; font-weight: 700; }
+  .chip.tagChip.active { background: #5C7A6B; border-color: #5C7A6B; color: #F3ECDD; }
+
+  /* Collection list */
+  .row { background: #242833; border: 1px solid #2E333F; border-radius: 10px; padding: 11px 13px; display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .rowMain { flex: 1; min-width: 0; }
+  .rowName { font-weight: 700; font-size: 15px; display: flex; align-items: center; gap: 5px; }
+  .rowMeta { font-size: 11px; color: #8F97A8; margin-top: 2px; }
+  .rowWho { display: flex; gap: 4px; margin-top: 5px; flex-wrap: wrap; }
+  .dot { width: 15px; height: 15px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 9px; color: #fff; font-weight: 700; flex-shrink: 0; }
+  .iconBtn { background: none; border: none; color: #8F97A8; cursor: pointer; padding: 6px; font-size: 16px; }
+  .iconBtn.fav.active { color: #C99A3D; }
+  .emptyList { text-align: center; color: #6C7383; font-size: 13px; padding: 20px 0; }
+
+  /* Groups / People */
+  .groupListRow { background: #242833; border: 1px solid #2E333F; border-radius: 12px; padding: 14px; margin-bottom: 10px; display: flex; align-items: center; gap: 12px; cursor: pointer; }
+  .groupListRow .gName { font-weight: 700; font-size: 15.5px; flex: 1; }
+  .groupListRow .gCount { font-size: 11.5px; color: #8F97A8; }
+  .groupListRow .arrow { color: #545B68; font-size: 16px; }
+  .memberCard { background: #242833; border: 1px solid #2E333F; border-radius: 12px; padding: 14px; margin-bottom: 10px; }
+  .memberHead { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .avatar { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; color: #fff; font-size: 14px; flex-shrink: 0; }
+  .memberName { font-weight: 700; font-size: 15px; flex: 1; }
+  .kindBadge { font-size: 10px; padding: 2px 7px; border-radius: 999px; background: #1B1E24; color: #8F97A8; border: 1px solid #2E333F; }
+  .prefTags { display: flex; gap: 5px; flex-wrap: wrap; }
+  .prefTag { font-size: 11px; background: #1B1E24; border: 1px solid #2E333F; color: #B7BECB; padding: 3px 9px; border-radius: 999px; }
+  .kindPickRow { display: flex; gap: 10px; margin-bottom: 16px; }
+  .kindPickBtn { flex: 1; border: 2px solid #C9BFA5; background: #FFFDF7; border-radius: 10px; padding: 14px 10px; text-align: center; cursor: pointer; }
+  .kindPickBtn.active { border-color: #5C7A6B; background: #E9EEE9; }
+  .kindPickBtn.disabled { opacity: 0.45; cursor: not-allowed; }
+  .kindPickBtn .kpIcon { font-size: 22px; display: block; margin-bottom: 4px; }
+  .kindPickBtn .kpTitle { font-weight: 700; font-size: 13.5px; color: #232019; }
+  .kindPickBtn .kpDesc { font-size: 10.5px; color: #7A7263; margin-top: 2px; }
+
+  .pickerCard { width: 100%; max-width: 560px; background: #1B1E24; border: 1px solid #262B36; border-radius: 14px; padding: 16px; margin-bottom: 20px; }
+  .pickerHead { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
+  .pickerHead .phTitle { font-size: 13px; font-weight: 700; color: #F3ECDD; letter-spacing: 0.04em; }
+  .pickerHead .phCount { font-size: 11px; color: #8F97A8; }
+  .selectedPillsRow { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 2px; }
+  .selectedPill { display: inline-flex; align-items: center; gap: 5px; background: rgba(201,154,61,0.14); border: 1px solid #C99A3D; color: #F3ECDD; padding: 5px 6px 5px 12px; border-radius: 999px; font-size: 12.5px; }
+  .selectedPill button { background: none; border: none; color: #C99A3D; font-size: 13px; cursor: pointer; padding: 2px 4px; line-height: 1; }
+  .pickList { max-height: 280px; overflow-y: auto; border-top: 1px solid #262B36; margin-top: 12px; }
+  .pickRow { display: flex; align-items: center; justify-content: space-between; padding: 11px 2px; border-bottom: 1px solid #21252E; cursor: pointer; gap: 10px; }
+  .pickRow:last-child { border-bottom: none; }
+  .pickRow:active { background: rgba(255,255,255,0.03); }
+  .pickRow .prName { font-size: 13.5px; color: #F3ECDD; }
+  .pickRow .prMeta { font-size: 11px; color: #8F97A8; margin-top: 2px; }
+  .pickRow .prCheck { width: 20px; height: 20px; border-radius: 6px; border: 1.5px solid #3A3F4C; display: flex; align-items: center; justify-content: center; font-size: 12px; color: transparent; flex-shrink: 0; }
+  .pickRow.selected .prCheck { background: #C99A3D; border-color: #C99A3D; color: #201804; }
+
+  /* Decision tab */
+  .segControl { width: 100%; max-width: 560px; display: flex; background: #20232B; border-radius: 10px; padding: 4px; margin-bottom: 16px; gap: 4px; }
+  .segBtn { flex: 1; border: none; background: transparent; color: #8F97A8; padding: 9px 0; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .segBtn.active { background: #C99A3D; color: #201804; }
+  .poolMemberRow { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .memberChip { flex-shrink: 0; display: flex; align-items: center; gap: 6px; border: 1px solid #3A3F4C; border-radius: 999px; padding: 6px 12px 6px 6px; cursor: pointer; color: #B7BECB; font-size: 12.5px; background: transparent; }
+  .memberChip.active { border-color: #C99A3D; background: rgba(201,154,61,0.12); color: #F3ECDD; }
+  .poolList { width: 100%; max-width: 560px; margin-bottom: 14px; }
+  .poolItem { display: flex; align-items: center; gap: 8px; background: #242833; border: 1px solid #2E333F; border-radius: 9px; padding: 9px 12px; margin-bottom: 6px; font-size: 13.5px; }
+  .poolItem .rm { margin-left: auto; background: none; border: none; color: #8F97A8; cursor: pointer; font-size: 15px; }
+  .browseToggle { font-size: 12.5px; color: #C99A3D; background: none; border: none; cursor: pointer; margin-bottom: 12px; text-decoration: underline; }
+  .browseList { width: 100%; max-width: 560px; max-height: 220px; overflow-y: auto; margin-bottom: 14px; border: 1px solid #2E333F; border-radius: 10px; }
+  .browseRow { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-bottom: 1px solid #2E333F; font-size: 13.5px; }
+  .browseRow:last-child { border-bottom: none; }
+  .browseRow input { width: 17px; height: 17px; }
+
+  .wheelWrap { width: 100%; max-width: 320px; margin: 4px auto 18px; display: flex; flex-direction: column; align-items: center; }
+  .wheelStack { position: relative; width: 280px; height: 280px; }
+  .wheelPointer { position: absolute; top: -6px; left: 50%; transform: translateX(-50%); font-size: 22px; z-index: 5; color: #F3ECDD; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.5)); }
+  #wheelCanvas, #collabWheelCanvas { border-radius: 50%; box-shadow: 0 10px 30px rgba(0,0,0,0.5); transition: transform 3.2s cubic-bezier(.17,.67,.16,.99); }
+  .wheelHub { position: absolute; top: 50%; left: 50%; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; background: #F3ECDD; border: 3px solid #1B1E24; z-index: 4; }
+
+  .suggestBox { width: 100%; max-width: 560px; }
+  .excludeNote { font-size: 12px; color: #8F97A8; margin-bottom: 10px; }
+  .historyList { width: 100%; max-width: 560px; margin-top: 6px; }
+  .histRow { display: flex; justify-content: space-between; font-size: 12.5px; color: #8F97A8; padding: 6px 2px; border-bottom: 1px solid #23262F; }
+
+  /* More tab */
+  .moreGroup { width: 100%; max-width: 560px; background: #20232B; border-radius: 12px; overflow: hidden; margin-bottom: 10px; }
+  .moreRow { background: transparent; border: none; border-bottom: 1px solid #2A2E38; border-radius: 0; padding: 14px 15px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+  .moreRow:last-child { border-bottom: none; }
+  .moreRow:active { background: rgba(255,255,255,0.03); }
+  .moreRow .mrLabel { font-size: 14.5px; }
+  .moreRow .mrArrow { color: #545B68; }
+  .morePanel { background: #1B1E24; padding: 14px 15px 16px; margin: -10px 0 12px; font-size: 12.5px; color: #B7BECB; line-height: 1.7; border-radius: 0 0 12px 12px; }
+  .appMeta { text-align: center; color: #545B68; font-size: 11px; margin-top: 18px; }
+
+  /* Modal */
+  .modalBg { position: fixed; inset: 0; background: rgba(10,11,14,0.6); display: flex; align-items: flex-end; justify-content: center; z-index: 500; }
+  .modal { background: #F3ECDD; color: #232019; width: 100%; max-width: 480px; border-radius: 18px 18px 0 0; padding: 20px 20px 26px; max-height: 86vh; overflow-y: auto; }
+  .modalHead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; font-weight: 700; font-size: 18px; }
+  .modalHead button { background: none; border: none; font-size: 20px; cursor: pointer; color: #232019; }
+  .locBadge { font-size: 11px; color: #5C7A6B; background: #E6E0CE; padding: 6px 10px; border-radius: 6px; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; }
+  .locBadge button { background: none; border: none; color: #B23A2E; font-size: 11px; cursor: pointer; text-decoration: underline; }
+  .field { margin-bottom: 13px; }
+  .field label { display: block; font-size: 12px; color: #7A7263; margin-bottom: 5px; }
+  .field input { width: 100%; border: 1px solid #C9BFA5; background: #FFFDF7; border-radius: 8px; padding: 10px 11px; font-size: 15px; font-family: inherit; color: #232019; }
+  .catRow, .priceRow, .memberPickRow { display: flex; gap: 6px; flex-wrap: wrap; }
+  .catChip, .priceBtn, .memberPickChip { border: 1px solid #C9BFA5; background: #FFFDF7; padding: 7px 12px; border-radius: 999px; font-size: 13px; cursor: pointer; }
+  .priceBtn { flex: 1; text-align: center; border-radius: 8px; }
+  .catChip.active, .memberPickChip.active { background: #5C7A6B; color: #F3ECDD; border-color: #5C7A6B; }
+  .priceBtn.active { background: #C99A3D; border-color: #C99A3D; color: #201804; font-weight: 700; }
+  .submitBtn { width: 100%; background: #232019; color: #F3ECDD; border: none; padding: 13px; border-radius: 8px; font-weight: 700; font-size: 15px; cursor: pointer; margin-top: 2px; }
+  .submitBtn:disabled { opacity: 0.4; }
+  .colorPick { display: flex; gap: 8px; }
+  .colorDot { width: 28px; height: 28px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; }
+  .colorDot.active { border-color: #232019; }
+
+  .toast { position: fixed; bottom: 76px; left: 50%; transform: translateX(-50%); background: #B23A2E; color: #F3ECDD; padding: 10px 18px; border-radius: 8px; font-size: 13px; z-index: 600; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+(function () {
+  var RKEY = "meal-picker:restaurants:v5";
+  var PKEY = "meal-picker:people:v1";
+  var GKEY = "meal-picker:groups:v3";
+  var HKEY = "meal-picker:history:v2";
+
+  var CATEGORIES = ["中式","日式","韓式","西式","東南亞","小吃","早餐","飲料甜點"];
+  var COMMON_CATEGORIES = ["中式","日式","韓式","西式","小吃"];
+  var MORE_CATEGORIES = CATEGORIES.filter(function (c) { return COMMON_CATEGORIES.indexOf(c) === -1; });
+  var PREF_TAGS = ["愛吃飯","愛吃麵","不吃牛","不吃辣","不吃海鮮","素食","不忌口"];
+  var PERSON_COLORS = ["#B23A2E","#C99A3D","#5C7A6B","#4E6E81","#7A5C74","#9C5B3E","#3E7C74"];
+  var WHEEL_PALETTE = ["#C99A3D","#5C7A6B","#B23A2E","#4E6E81","#7A5C74","#9C5B3E","#3E7C74","#7C7C4A"];
+
+  var SEED_PEOPLE = [
+    { id: "p1", name: "哥哥", color: PERSON_COLORS[0], prefs: ["愛吃麵"] },
+    { id: "p2", name: "爸爸", color: PERSON_COLORS[1], prefs: ["不吃牛"] },
+    { id: "p3", name: "媽媽", color: PERSON_COLORS[2], prefs: ["愛吃飯","不吃辣"] }
+  ];
+  var SEED_GROUPS = [
+    { id: "g-default", name: "家庭", personIds: ["p1", "p2", "p3"] }
+  ];
+  var SEED_RESTAURANTS = [
+    { id: "s1", name: "巷口滷味", category: "小吃", price: 1, note: "記得加辣", favorite: true, x: null, y: null, tagIds: [] },
+    { id: "s2", name: "一風堂拉麵", category: "日式", price: 2, note: "", favorite: false, x: null, y: null, tagIds: ["p1"] },
+    { id: "s3", name: "阿霞火鍋", category: "中式", price: 2, note: "湯頭濃郁", favorite: true, x: null, y: null, tagIds: ["p3"] }
+  ];
+
+  var state = {
+    restaurants: null, people: null, groups: null, history: null,
+    tab: "地圖",
+
+    openPinId: null,
+
+    colCatFilter: "全部",
+    colCatExpanded: false,
+    colTagFilter: "全部",
+
+    groupsSelectedId: null,
+
+    decMode: "抽籤",
+    pool: [], drawn: null, browseOpen: false, catState: {}, suggestCatExpanded: false, suggestion: null, spinning: false,
+
+    collab: {
+      step: "chooseAudience", audienceType: null, audienceGroupId: null,
+      decisionMode: "random", deadlineAt: null,
+      participants: [], pool: [], votes: {}, winner: null, noResult: false, spinning: false,
+      adhocForm: { name: "", category: CATEGORIES[0] }, savedAsGroup: false, browseOpen: false
+    },
+
+    showModal: false, modalType: "restaurant", pendingLoc: null,
+    form: { name: "", category: CATEGORIES[0], price: 1, note: "", tagIds: [] },
+    personForm: { id: null, name: "", color: PERSON_COLORS[0], prefs: [], groupContextId: null },
+    groupForm: { name: "" },
+    morePanelOpen: null,
+
+    toastMsg: ""
+  };
+
+  var hasStorage = typeof window !== "undefined" && !!window.storage;
+  var ticketNo = Math.floor(Math.random() * 900) + 100;
+  var collabTimerHandle = null;
+
+  function uid() { return Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4); }
+  function priceLabel(p) { return p ? "$".repeat(p) : "未填價位"; }
+  function el(tag, attrs, html) {
+    var e = document.createElement(tag);
+    if (attrs) for (var k in attrs) { if (k === "class") e.className = attrs[k]; else e.setAttribute(k, attrs[k]); }
+    if (html !== undefined) e.innerHTML = html;
+    return e;
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; });
+  }
+  function personById(id) { return (state.people || []).filter(function (p) { return p.id === id; })[0]; }
+  function groupById(id) { return (state.groups || []).filter(function (g) { return g.id === id; })[0]; }
+  function initials(name) { return name ? name.slice(0, 1) : "?"; }
+  function showToast(msg) { state.toastMsg = msg; render(); setTimeout(function () { state.toastMsg = ""; render(); }, 2200); }
+  function notReady() { showToast("此功能尚未開放,之後接上資料庫才會實裝"); }
+
+  // ---------- load / persist ----------
+  function load() {
+    if (!hasStorage) {
+      state.restaurants = SEED_RESTAURANTS.slice();
+      state.people = SEED_PEOPLE.slice();
+      state.groups = SEED_GROUPS.slice();
+      state.history = [];
+      render();
+      return;
+    }
+    (async function () {
+      var rRes = null, pRes = null, gRes = null, hRes = null;
+      try { rRes = await window.storage.get(RKEY, false); } catch (e) { rRes = null; }
+      try { pRes = await window.storage.get(PKEY, false); } catch (e) { pRes = null; }
+      try { gRes = await window.storage.get(GKEY, false); } catch (e) { gRes = null; }
+      try { hRes = await window.storage.get(HKEY, false); } catch (e) { hRes = null; }
+
+      state.restaurants = (rRes && rRes.value) ? JSON.parse(rRes.value) : SEED_RESTAURANTS.slice();
+      state.people = (pRes && pRes.value) ? JSON.parse(pRes.value) : SEED_PEOPLE.slice();
+      state.groups = (gRes && gRes.value) ? JSON.parse(gRes.value) : SEED_GROUPS.slice();
+      state.history = (hRes && hRes.value) ? JSON.parse(hRes.value) : [];
+
+      if (!rRes || !rRes.value) { try { await window.storage.set(RKEY, JSON.stringify(state.restaurants), false); } catch (e) {} }
+      if (!pRes || !pRes.value) { try { await window.storage.set(PKEY, JSON.stringify(state.people), false); } catch (e) {} }
+      if (!gRes || !gRes.value) { try { await window.storage.set(GKEY, JSON.stringify(state.groups), false); } catch (e) {} }
+
+      render();
+    })().catch(function () {
+      state.restaurants = SEED_RESTAURANTS.slice();
+      state.people = SEED_PEOPLE.slice();
+      state.groups = SEED_GROUPS.slice();
+      state.history = [];
+      render();
+    });
+  }
+  function wait(ms) { return new Promise(function (res) { setTimeout(res, ms); }); }
+  async function safeStorageSet(key, value) {
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try { await window.storage.set(key, value, false); return true; }
+      catch (e) { if (attempt === 0) await wait(350); }
+    }
+    return false;
+  }
+  function persistRestaurants() { render(); if (hasStorage) (async function () { var ok = await safeStorageSet(RKEY, JSON.stringify(state.restaurants)); if (!ok) showToast("儲存失敗,請檢查網路後再試一次"); })(); }
+  function persistPeople() { render(); if (hasStorage) (async function () { var ok = await safeStorageSet(PKEY, JSON.stringify(state.people)); if (!ok) showToast("儲存失敗,請檢查網路後再試一次"); })(); }
+  function persistGroups() { render(); if (hasStorage) (async function () { var ok = await safeStorageSet(GKEY, JSON.stringify(state.groups)); if (!ok) showToast("儲存失敗,請檢查網路後再試一次"); })(); }
+  function persistHistory() { if (hasStorage) (async function () { await safeStorageSet(HKEY, JSON.stringify(state.history)); })(); }
+
+  // ---------- restaurant ops ----------
+  function toggleFavorite(id) {
+    state.restaurants = state.restaurants.map(function (r) { return r.id === id ? Object.assign({}, r, { favorite: !r.favorite }) : r; });
+    persistRestaurants();
+  }
+  function removeRestaurant(id) {
+    state.restaurants = state.restaurants.filter(function (r) { return r.id !== id; });
+    state.pool = state.pool.filter(function (pid) { return pid !== id; });
+    state.collab.pool = state.collab.pool.filter(function (pid) { return pid !== id; });
+    if (state.openPinId === id) state.openPinId = null;
+    persistRestaurants();
+  }
+  function openAddRestaurantModal(loc) {
+    state.modalType = "restaurant";
+    state.pendingLoc = loc || null;
+    state.form = { name: "", category: CATEGORIES[0], price: 1, note: "", tagIds: [] };
+    state.showModal = true;
+    render();
+  }
+  function submitRestaurantForm() {
+    if (!state.form.name.trim()) return;
+    var item = {
+      id: uid(), name: state.form.name.trim(), category: state.form.category, price: state.form.price,
+      note: state.form.note.trim(), favorite: false,
+      x: state.pendingLoc ? state.pendingLoc.x : null, y: state.pendingLoc ? state.pendingLoc.y : null,
+      tagIds: state.form.tagIds.slice()
+    };
+    state.restaurants = [item].concat(state.restaurants);
+    state.showModal = false; state.pendingLoc = null;
+    persistRestaurants();
+  }
+
+  // ---------- people ops ----------
+  function openAddPersonModal(groupContextId, existing) {
+    state.modalType = "person";
+    state.personForm = existing
+      ? Object.assign({}, existing, { prefs: existing.prefs.slice(), groupContextId: groupContextId })
+      : { id: null, name: "", color: PERSON_COLORS[(state.people || []).length % PERSON_COLORS.length], prefs: [], groupContextId: groupContextId };
+    state.showModal = true;
+    render();
+  }
+  function submitPersonForm() {
+    if (!state.personForm.name.trim()) return;
+    if (state.personForm.id) {
+      state.people = state.people.map(function (p) { return p.id === state.personForm.id ? Object.assign({}, p, { name: state.personForm.name.trim(), color: state.personForm.color, prefs: state.personForm.prefs }) : p; });
+      persistPeople();
+    } else {
+      var newPerson = { id: uid(), name: state.personForm.name.trim(), color: state.personForm.color, prefs: state.personForm.prefs };
+      state.people = state.people.concat([newPerson]);
+      var gid = state.personForm.groupContextId;
+      if (gid) {
+        state.groups = state.groups.map(function (g) { return g.id === gid ? Object.assign({}, g, { personIds: g.personIds.concat([newPerson.id]) }) : g; });
+        persistGroups();
+      }
+      persistPeople();
+    }
+    state.showModal = false;
+    render();
+  }
+  function removePersonFromGroup(groupId, personId) {
+    state.groups = state.groups.map(function (g) { return g.id === groupId ? Object.assign({}, g, { personIds: g.personIds.filter(function (id) { return id !== personId; }) }) : g; });
+    persistGroups();
+  }
+  function deletePersonGlobally(personId) {
+    if (!(window.confirm ? window.confirm("確定要完全刪除這個人嗎?會從所有群組移除,餐廳上標記他的標籤也會一併清除。") : true)) return;
+    state.people = state.people.filter(function (p) { return p.id !== personId; });
+    state.groups = state.groups.map(function (g) { return Object.assign({}, g, { personIds: g.personIds.filter(function (id) { return id !== personId; }) }); });
+    state.restaurants = state.restaurants.map(function (r) { return Object.assign({}, r, { tagIds: r.tagIds.filter(function (id) { return id !== personId; }) }); });
+    persistGroups(); persistPeople(); persistRestaurants();
+  }
+  function addExistingPersonToGroup(groupId, personId) {
+    state.groups = state.groups.map(function (g) { return g.id === groupId ? Object.assign({}, g, { personIds: g.personIds.indexOf(personId) === -1 ? g.personIds.concat([personId]) : g.personIds }) : g; });
+    persistGroups();
+  }
+
+  // ---------- group ops ----------
+  function openAddGroupModal() {
+    state.modalType = "group";
+    state.groupForm = { name: "" };
+    state.showModal = true;
+    render();
+  }
+  function submitGroupForm() {
+    if (!state.groupForm.name.trim()) return;
+    var g = { id: uid(), name: state.groupForm.name.trim(), personIds: [] };
+    state.groups = state.groups.concat([g]);
+    state.showModal = false;
+    state.groupsSelectedId = g.id;
+    persistGroups();
+  }
+  function deleteGroup(id) {
+    if (!(window.confirm ? window.confirm("確定要刪除這個群組嗎?群組內的人不會被刪除,只是移除這個群組。") : true)) return;
+    state.groups = state.groups.filter(function (g) { return g.id !== id; });
+    if (state.groupsSelectedId === id) state.groupsSelectedId = null;
+    persistGroups();
+  }
+
+  // ---------- decision history ----------
+  function recordDecision(restaurant) {
+    var entry = { id: uid(), restaurantId: restaurant.id, name: restaurant.name, category: restaurant.category, ts: Date.now() };
+    state.history = [entry].concat(state.history).slice(0, 20);
+    persistHistory();
+  }
+  function recentCategories(limit) {
+    var seen = [];
+    for (var i = 0; i < state.history.length && seen.length < limit; i++) {
+      if (seen.indexOf(state.history[i].category) === -1) seen.push(state.history[i].category);
+    }
+    return seen;
+  }
+
+  // ---------- personal quick-draw pool ----------
+  function togglePool(id) {
+    if (state.pool.indexOf(id) === -1) state.pool = state.pool.concat([id]);
+    else state.pool = state.pool.filter(function (x) { return x !== id; });
+    render();
+  }
+  function addPersonFavoritesToPool(personId) {
+    var toAdd = state.restaurants.filter(function (r) { return r.tagIds.indexOf(personId) !== -1; }).map(function (r) { return r.id; });
+    var setPool = {}; state.pool.forEach(function (id) { setPool[id] = true; });
+    var allIn = toAdd.every(function (id) { return setPool[id]; });
+    if (allIn) state.pool = state.pool.filter(function (id) { return toAdd.indexOf(id) === -1; });
+    else toAdd.forEach(function (id) { if (state.pool.indexOf(id) === -1) state.pool.push(id); });
+    render();
+  }
+  function personPoolActive(personId) {
+    var favIds = state.restaurants.filter(function (r) { return r.tagIds.indexOf(personId) !== -1; }).map(function (r) { return r.id; });
+    if (favIds.length === 0) return false;
+    return favIds.every(function (id) { return state.pool.indexOf(id) !== -1; });
+  }
+  function poolRestaurants() {
+    return state.pool.map(function (id) { return state.restaurants.filter(function (r) { return r.id === id; })[0]; }).filter(Boolean);
+  }
+
+  // ---------- spin wheel (generic) ----------
+  function spinWheel() {
+    var items = poolRestaurants();
+    if (items.length < 2 || state.spinning) return;
+    state.spinning = true; state.drawn = null; render();
+    var started = spinWheelOnCanvas("wheelCanvas", items, function (winner) {
+      state.spinning = false; state.drawn = winner; recordDecision(winner); render();
+    });
+    if (!started) state.spinning = false;
+  }
+  function spinWheelOnCanvas(canvasId, items, onComplete) {
+    var canvas = document.getElementById(canvasId);
+    if (!canvas || items.length < 2) return false;
+    var winnerIdx = Math.floor(Math.random() * items.length);
+    var sliceAngle = 360 / items.length;
+    var angleInWheel = (winnerIdx + 0.5) * sliceAngle;
+    var spins = 5 + Math.floor(Math.random() * 3);
+    var target = spins * 360 + ((360 - angleInWheel) % 360);
+    canvas.style.transition = "none";
+    canvas.style.transform = "rotate(0deg)";
+    void canvas.offsetHeight;
+    canvas.style.transition = "transform 3.2s cubic-bezier(.17,.67,.16,.99)";
+    canvas.style.transform = "rotate(" + target + "deg)";
+    setTimeout(function () { onComplete(items[winnerIdx]); }, 3300);
+    return true;
+  }
+  function drawWheelCanvas(items) { drawWheelOnCanvas("wheelCanvas", items); }
+  function drawWheelOnCanvas(canvasId, items) {
+    var canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    var size = 280;
+    canvas.width = size; canvas.height = size;
+    var ctx = canvas.getContext("2d");
+    var cx = size / 2, cy = size / 2, r = size / 2 - 4;
+    ctx.clearRect(0, 0, size, size);
+    var n = items.length;
+    if (n === 0) {
+      ctx.fillStyle = "#20232B"; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#6C7383"; ctx.font = "13px sans-serif"; ctx.textAlign = "center";
+      ctx.fillText("尚未加入候選店家", cx, cy);
+      return;
+    }
+    var sliceAngle = (Math.PI * 2) / n;
+    for (var i = 0; i < n; i++) {
+      var start = -Math.PI / 2 + i * sliceAngle;
+      var end = start + sliceAngle;
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, r, start, end); ctx.closePath();
+      ctx.fillStyle = WHEEL_PALETTE[i % WHEEL_PALETTE.length]; ctx.fill();
+      ctx.strokeStyle = "#15171C"; ctx.lineWidth = 2; ctx.stroke();
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate(start + sliceAngle / 2);
+      ctx.textAlign = "right"; ctx.fillStyle = "#F3ECDD"; ctx.font = "bold 13px sans-serif";
+      var label = items[i].name.length > 8 ? items[i].name.slice(0, 7) + "…" : items[i].name;
+      ctx.fillText(label, r - 14, 4);
+      ctx.restore();
+    }
+  }
+
+  // ---------- share result as image ----------
+  function roundRectPath(ctx, x, y, w, h, r) {
+    ctx.beginPath(); ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+  function wrapCjkText(ctx, text, x, y, maxWidth, lineHeight) {
+    var line = "", lines = [];
+    for (var i = 0; i < text.length; i++) {
+      var test = line + text[i];
+      if (ctx.measureText(test).width > maxWidth && line !== "") { lines.push(line); line = text[i]; }
+      else line = test;
+    }
+    if (line) lines.push(line);
+    lines.forEach(function (l, idx) { ctx.fillText(l, x, y + idx * lineHeight); });
+    return lines.length * lineHeight;
+  }
+  function buildShareCanvas(restaurant, subtitle, label) {
+    var w = 640, h = 820;
+    var canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    var ctx = canvas.getContext("2d");
+    var grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, "#262B36"); grad.addColorStop(1, "#15171C");
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, w, h);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#F3ECDD"; ctx.font = "bold 30px sans-serif";
+    ctx.fillText("這餐吃什麼", w / 2, 74);
+    ctx.fillStyle = "#8F97A8"; ctx.font = "13px monospace";
+    ctx.fillText(subtitle || "決策結果", w / 2, 100);
+    var cardX = 48, cardY = 140, cardW = w - 96, cardH = h - 140 - 60;
+    ctx.fillStyle = "#F3ECDD";
+    roundRectPath(ctx, cardX, cardY, cardW, cardH, 14); ctx.fill();
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#8A6A2A"; ctx.font = "bold 18px sans-serif";
+    ctx.fillText(label || "今晚就吃這間", cardX + 36, cardY + 60);
+    ctx.fillStyle = "#232019"; ctx.font = "bold 46px sans-serif";
+    var nameBottom = cardY + 130;
+    var used = wrapCjkText(ctx, restaurant.name, cardX + 36, nameBottom, cardW - 72, 54);
+    ctx.fillStyle = "#5C7A6B"; ctx.font = "20px monospace";
+    var metaY = nameBottom + used - 54 + 70;
+    ctx.fillText(restaurant.category + "  ・  " + priceLabel(restaurant.price), cardX + 36, metaY);
+    var tagY = metaY + 46;
+    if (restaurant.tagIds && restaurant.tagIds.length) {
+      var tx = cardX + 36;
+      restaurant.tagIds.forEach(function (pid) {
+        var p = personById(pid); if (!p) return;
+        var label2 = p.name;
+        ctx.font = "14px sans-serif";
+        var tw = ctx.measureText(label2).width + 24;
+        ctx.fillStyle = p.color;
+        roundRectPath(ctx, tx, tagY, tw, 30, 15); ctx.fill();
+        ctx.fillStyle = "#F3ECDD"; ctx.textAlign = "left";
+        ctx.fillText(label2, tx + 12, tagY + 20);
+        tx += tw + 8;
+      });
+    }
+    if (restaurant.note) {
+      ctx.fillStyle = "#6B6252"; ctx.font = "16px sans-serif";
+      wrapCjkText(ctx, restaurant.note, cardX + 36, tagY + 60, cardW - 72, 24);
+    }
+    var d = new Date();
+    ctx.fillStyle = "#8F97A8"; ctx.font = "12px monospace"; ctx.textAlign = "center";
+    ctx.fillText((d.getMonth() + 1) + "/" + d.getDate() + " 決定", w / 2, h - 26);
+    return canvas;
+  }
+  function shareResultImage(restaurant, subtitle, label) {
+    try {
+      var canvas = buildShareCanvas(restaurant, subtitle, label);
+      canvas.toBlob(function (blob) {
+        if (!blob) { downloadCanvas(canvas, restaurant.name); return; }
+        var file = new File([blob], restaurant.name + "-決策結果.png", { type: "image/png" });
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+          navigator.share({ files: [file], title: "這餐吃什麼", text: restaurant.name }).catch(function () { downloadCanvas(canvas, restaurant.name); });
+        } else downloadCanvas(canvas, restaurant.name);
+      });
+    } catch (e) { showToast("圖片產生失敗"); }
+  }
+  function downloadCanvas(canvas, name) {
+    try {
+      var url = canvas.toDataURL("image/png");
+      var a = document.createElement("a");
+      a.href = url; a.download = name + "-決策結果.png";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      showToast("圖片已下載,可以分享到社群了");
+    } catch (e) { showToast("圖片產生失敗"); }
+  }
+
+  // ---------- suggestion mode ----------
+  function cycleCatState(cat) {
+    var cur = state.catState[cat];
+    var next = cur === undefined ? "include" : cur === "include" ? "exclude" : undefined;
+    var ns = Object.assign({}, state.catState);
+    if (next === undefined) delete ns[cat]; else ns[cat] = next;
+    state.catState = ns; render();
+  }
+  function getSuggestion() {
+    var includeCats = Object.keys(state.catState).filter(function (c) { return state.catState[c] === "include"; });
+    var excludeCats = Object.keys(state.catState).filter(function (c) { return state.catState[c] === "exclude"; });
+    var autoExclude = recentCategories(1);
+    var candidates = state.restaurants.filter(function (r) {
+      if (includeCats.length > 0 && includeCats.indexOf(r.category) === -1) return false;
+      if (excludeCats.indexOf(r.category) !== -1) return false;
+      if (autoExclude.indexOf(r.category) !== -1 && includeCats.indexOf(r.category) === -1) return false;
+      return true;
+    });
+    if (candidates.length === 0) candidates = state.restaurants.filter(function (r) { return includeCats.length === 0 || includeCats.indexOf(r.category) !== -1; }).filter(function (r) { return excludeCats.indexOf(r.category) === -1; });
+    if (candidates.length === 0) { state.suggestion = null; render(); return; }
+    state.suggestion = candidates[Math.floor(Math.random() * candidates.length)];
+    recordDecision(state.suggestion);
+    render();
+  }
+
+  // ---------- collaborative session ----------
+  function collabDefaultDeadline() { return Date.now() + 60 * 60 * 1000; }
+
+  function collabReset() {
+    if (collabTimerHandle) { clearInterval(collabTimerHandle); collabTimerHandle = null; }
+    state.collab = {
+      step: "chooseAudience", audienceType: null, audienceGroupId: null,
+      decisionMode: "random", deadlineAt: null,
+      participants: [], pool: [], votes: {}, winner: null, noResult: false, spinning: false,
+      adhocForm: { name: "", category: CATEGORIES[0] }, savedAsGroup: false, browseOpen: false
+    };
+  }
+  function collabGroupTags() {
+    if (state.collab.audienceType !== "group" || !state.collab.audienceGroupId) return [];
+    var g = groupById(state.collab.audienceGroupId);
+    if (!g) return [];
+    return g.personIds.map(personById).filter(Boolean);
+  }
+  function collabChooseGroup(groupId) {
+    var g = groupById(groupId);
+    if (!g) return;
+    state.collab.audienceType = "group";
+    state.collab.audienceGroupId = groupId;
+    state.collab.participants = [];
+    state.collab.deadlineAt = state.collab.deadlineAt || collabDefaultDeadline();
+    state.collab.step = "setup";
+    render();
+  }
+  function collabChooseAdhoc() {
+    state.collab.audienceType = "adhoc";
+    state.collab.audienceGroupId = null;
+    state.collab.participants = [];
+    state.collab.deadlineAt = state.collab.deadlineAt || collabDefaultDeadline();
+    state.collab.step = "setup";
+    render();
+  }
+  function collabEnterInvite() {
+    if (!state.collab.deadlineAt || state.collab.deadlineAt <= Date.now()) { showToast("截止時間要選未來的時間"); return; }
+    state.collab.step = "invite";
+    render();
+  }
+  function collabEnterActive() {
+    state.collab.step = "active";
+    render();
+    if (collabTimerHandle) clearInterval(collabTimerHandle);
+    collabTimerHandle = setInterval(collabActiveTick, 1000);
+  }
+  function collabActiveTick() {
+    if (state.collab.step !== "active") { clearInterval(collabTimerHandle); collabTimerHandle = null; return; }
+    if (Date.now() >= state.collab.deadlineAt) {
+      clearInterval(collabTimerHandle); collabTimerHandle = null;
+      collabSettle();
+    } else render();
+  }
+  function collabAddGuestPreview() {
+    var n = state.collab.participants.filter(function (p) { return p.isGuest; }).length + 1;
+    state.collab.participants.push({ id: "guest-" + uid(), name: "訪客" + n, color: "#6C7383", ready: false, isGuest: true });
+    render();
+  }
+  function collabToggleRestaurantNoRender(restaurantId) {
+    var existing = state.collab.pool.filter(function (item) { return item.restaurantId === restaurantId; })[0];
+    if (existing) {
+      state.collab.pool = state.collab.pool.filter(function (item) { return item.id !== existing.id; });
+    } else {
+      var r = state.restaurants.filter(function (x) { return x.id === restaurantId; })[0];
+      if (!r) return;
+      state.collab.pool = state.collab.pool.concat([{ id: uid(), restaurantId: r.id, name: r.name, category: r.category, price: r.price, isAdhoc: false }]);
+    }
+  }
+  function collabToggleRestaurant(restaurantId) {
+    collabToggleRestaurantNoRender(restaurantId);
+    render();
+  }
+  function collabPoolHasRestaurant(restaurantId) {
+    return state.collab.pool.some(function (item) { return item.restaurantId === restaurantId; });
+  }
+  function collabAddAdhocCandidate() {
+    var name = state.collab.adhocForm.name.trim();
+    if (!name) return;
+    state.collab.pool = state.collab.pool.concat([{
+      id: uid(), restaurantId: null, name: name, category: state.collab.adhocForm.category, price: null, isAdhoc: true
+    }]);
+    state.collab.adhocForm = { name: "", category: state.collab.adhocForm.category };
+    render();
+  }
+  function collabRemovePoolItem(itemId) {
+    state.collab.pool = state.collab.pool.filter(function (item) { return item.id !== itemId; });
+    render();
+  }
+  function collabVote(itemId, accepted) {
+    var v = state.collab.votes[itemId] || { accept: 0, reject: 0 };
+    if (accepted) v.accept += 1; else v.reject += 1;
+    var nv = Object.assign({}, state.collab.votes); nv[itemId] = v;
+    state.collab.votes = nv;
+    render();
+  }
+  function collabToggleReady(pid) {
+    state.collab.participants = state.collab.participants.map(function (p) { return p.id === pid ? Object.assign({}, p, { ready: !p.ready }) : p; });
+    render();
+  }
+  function collabEligibleItems() {
+    var pool = state.collab.pool;
+    if (state.collab.decisionMode !== "vote_first") return pool;
+    var accepted = pool.filter(function (item) { var v = state.collab.votes[item.id]; return !v || v.reject === 0; });
+    return accepted.length > 0 ? accepted : pool;
+  }
+  function collabSettle() {
+    var pool = state.collab.pool;
+    if (pool.length === 0) {
+      state.collab.step = "result";
+      state.collab.noResult = true;
+      state.collab.winner = null;
+      render();
+      return;
+    }
+    var accepted = pool.filter(function (item) { var v = state.collab.votes[item.id]; return !v || v.reject === 0; });
+    var eligible = state.collab.decisionMode === "vote_first" ? accepted : pool;
+    var fellBack = state.collab.decisionMode === "vote_first" && accepted.length === 0 && pool.length > 0;
+    if (eligible.length === 0) eligible = pool;
+
+    if (eligible.length === 1) {
+      finishCollabWithWinner(eligible[0]);
+      return;
+    }
+    if (fellBack) showToast("沒有店家獲得全員接受,改用完整候選名單");
+    state.collab.step = "result";
+    state.collab.noResult = false;
+    state.collab.spinning = true;
+    render();
+    spinWheelOnCanvas("collabWheelCanvas", eligible, function (winner) {
+      finishCollabWithWinner(winner);
+    });
+  }
+  function finishCollabWithWinner(item) {
+    state.collab.spinning = false;
+    state.collab.noResult = false;
+    state.collab.winner = item;
+    state.collab.step = "result";
+    if (!item.isAdhoc) {
+      var r = state.restaurants.filter(function (x) { return x.id === item.restaurantId; })[0];
+      if (r) recordDecision(r);
+    } else {
+      recordDecision({ name: item.name, category: item.category });
+    }
+    render();
+  }
+  function collabForceSettleNow() {
+    if (collabTimerHandle) { clearInterval(collabTimerHandle); collabTimerHandle = null; }
+    collabSettle();
+  }
+  function collabSaveParticipantsAsGroup() {
+    if (state.collab.participants.length === 0) { showToast("目前沒有參與者可以存"); return; }
+    var newPeople = state.collab.participants.map(function (p) {
+      return { id: uid(), name: p.name, color: p.color, prefs: [] };
+    });
+    state.people = state.people.concat(newPeople);
+    var newGroup = { id: uid(), name: "協作場次 " + new Date().toLocaleDateString("zh-TW"), personIds: newPeople.map(function (p) { return p.id; }) };
+    state.groups = state.groups.concat([newGroup]);
+    state.collab.savedAsGroup = true;
+    persistPeople(); persistGroups();
+    showToast("已存成新群組「" + newGroup.name + "」");
+  }
+
+  // ---------- render root ----------
+  function render() {
+    var app = document.getElementById("app");
+    app.innerHTML = "";
+    if (state.restaurants === null || state.people === null || state.groups === null) {
+      app.appendChild(el("div", { style: "min-height:100vh;display:flex;align-items:center;justify-content:center;color:#F3ECDD;" }, "載入中…"));
+      return;
+    }
+    var wrap = el("div", { class: "wrap" });
+
+    var header = el("div", { class: "header" });
+    var headerLeft = el("div", { class: "headerLeft" });
+    if (state.tab === "群組" && state.groupsSelectedId) {
+      var backBtn = el("button", { class: "backBtn" }, "←");
+      backBtn.onclick = function () { state.groupsSelectedId = null; render(); };
+      headerLeft.appendChild(backBtn);
+    }
+    headerLeft.appendChild(el("div", { class: "title" }, "這餐吃什麼<small class='mono'>" + headerSubtitle() + "</small>"));
+    header.appendChild(headerLeft);
+
+    if (state.tab === "收藏") {
+      var addBtn = el("button", { class: "addBtn" }, "＋");
+      addBtn.onclick = function () { openAddRestaurantModal(null); };
+      header.appendChild(addBtn);
+    } else if (state.tab === "群組" && state.groupsSelectedId) {
+      var addMBtn = el("button", { class: "addBtn" }, "＋");
+      addMBtn.onclick = function () { openAddPersonModal(state.groupsSelectedId, null); };
+      header.appendChild(addMBtn);
+    } else if (state.tab === "群組" && !state.groupsSelectedId) {
+      var addGBtn = el("button", { class: "addBtn" }, "＋");
+      addGBtn.onclick = openAddGroupModal;
+      header.appendChild(addGBtn);
+    }
+    wrap.appendChild(header);
+
+    if (state.tab === "地圖") wrap.appendChild(renderMapTab());
+    else if (state.tab === "收藏") wrap.appendChild(renderCollectionTab());
+    else if (state.tab === "群組") wrap.appendChild(renderGroupsTab());
+    else if (state.tab === "決策") wrap.appendChild(renderDecisionTab());
+    else wrap.appendChild(renderMoreTab());
+
+    app.appendChild(wrap);
+    app.appendChild(renderTabbar());
+    if (state.showModal) app.appendChild(renderModal());
+    if (state.toastMsg) app.appendChild(el("div", { class: "toast" }, state.toastMsg));
+
+    if (state.tab === "決策" && state.decMode === "抽籤") {
+      setTimeout(function () { drawWheelCanvas(poolRestaurants()); }, 10);
+    }
+    if (state.tab === "決策" && state.decMode === "協作場次" && state.collab.step === "result") {
+      setTimeout(function () { drawWheelOnCanvas("collabWheelCanvas", collabEligibleItems()); }, 10);
+    }
+  }
+
+  function headerSubtitle() {
+    if (state.tab === "地圖" || state.tab === "收藏") return "我的收藏 · " + state.restaurants.length + " 間";
+    if (state.tab === "群組") {
+      if (state.groupsSelectedId) {
+        var g = groupById(state.groupsSelectedId);
+        return g ? (escapeHtml(g.name) + " · " + g.personIds.length + " 人") : "群組";
+      }
+      return "群組 · " + state.groups.length + " 個";
+    }
+    if (state.tab === "決策") return "決策";
+    return "更多";
+  }
+
+  function renderTabbar() {
+    var bar = el("div", { class: "tabbar" });
+    [["地圖","🗺️"],["收藏","⭐"],["群組","👥"],["決策","🎯"],["更多","☰"]].forEach(function (pair) {
+      var name = pair[0], icon = pair[1];
+      var b = el("button", { class: "tabBtn" + (state.tab === name ? " active" : "") }, "<span class='ic'>" + icon + "</span><span>" + name + "</span>");
+      b.onclick = function () { state.tab = name; state.openPinId = null; render(); };
+      bar.appendChild(b);
+    });
+    return bar;
+  }
+
+  // ---------- MAP TAB ----------
+  function renderMapTab() {
+    var frag = document.createDocumentFragment();
+    var note = el("div", { class: "shareNote" }, "💡 想加入真實店家:先在 Google 地圖或跟我聊天搜尋附近餐廳,再手動點下方地圖標記位置、輸入店名即可加入收藏。<b>直接串接 Google 地圖需要付費金鑰,暫不內建以避免金鑰外流風險。</b>");
+    frag.appendChild(note);
+    var mw = el("div", { class: "mapWrap" });
+    var board = el("div", { class: "board" });
+    board.appendChild(el("div", { class: "compass mono" }, "N ↑"));
+    state.restaurants.forEach(function (r) {
+      if (r.x == null || r.y == null) return;
+      var pin = el("div", { class: "pin" });
+      pin.style.left = r.x + "%"; pin.style.top = r.y + "%";
+      pin.style.background = r.favorite ? "#C99A3D" : "#5C7A6B";
+      pin.title = r.name;
+      pin.onclick = function (e) { e.stopPropagation(); state.openPinId = (state.openPinId === r.id ? null : r.id); render(); };
+      board.appendChild(pin);
+      if (state.openPinId === r.id) {
+        var pop = el("div", { class: "pinPopover" });
+        pop.style.left = r.x + "%"; pop.style.top = r.y + "%";
+        var closeX = el("button", { class: "closeX" }, "✕");
+        closeX.onclick = function (e) { e.stopPropagation(); state.openPinId = null; render(); };
+        pop.appendChild(closeX);
+        pop.appendChild(el("div", { class: "pName" }, escapeHtml(r.name)));
+        pop.appendChild(el("div", { class: "pMeta mono" }, escapeHtml(r.category) + " ・ " + priceLabel(r.price)));
+        var btns = el("div", { class: "pBtns" });
+        var favB = el("button", {}, r.favorite ? "★ 已收藏" : "☆ 收藏");
+        favB.onclick = function (e) { e.stopPropagation(); toggleFavorite(r.id); };
+        var delB = el("button", {}, "🗑 刪除");
+        delB.onclick = function (e) { e.stopPropagation(); removeRestaurant(r.id); };
+        btns.appendChild(favB); btns.appendChild(delB);
+        pop.appendChild(btns);
+        board.appendChild(pop);
+      }
+    });
+    board.onclick = function (e) {
+      var rect = board.getBoundingClientRect();
+      var xPct = ((e.clientX - rect.left) / rect.width) * 100;
+      var yPct = ((e.clientY - rect.top) / rect.height) * 100;
+      state.openPinId = null;
+      openAddRestaurantModal({ x: Math.max(2, Math.min(98, xPct)), y: Math.max(2, Math.min(98, yPct)) });
+    };
+    mw.appendChild(board);
+    mw.appendChild(el("div", { class: "mapHint" }, "📍 點任一位置新增店家(相對位置定位板)"));
+    frag.appendChild(mw);
+    return frag;
+  }
+
+  // ---------- COLLECTION TAB ----------
+  function renderCollectionTab() {
+    var frag = document.createDocumentFragment();
+
+    frag.appendChild(el("div", { class: "filterGroupLabel mono" }, "食物類型"));
+    var catList = Array.from(new Set(state.restaurants.map(function (r) { return r.category; })));
+    var presentCommon = COMMON_CATEGORIES.filter(function (c) { return catList.indexOf(c) !== -1; });
+    var presentMore = MORE_CATEGORIES.filter(function (c) { return catList.indexOf(c) !== -1; });
+    var f1 = el("div", { class: "filters" });
+    ["全部"].concat(presentCommon).forEach(function (name) {
+      var b = el("button", { class: "chip" + (state.colCatFilter === name ? " active" : "") }, escapeHtml(name));
+      b.onclick = function () { state.colCatFilter = name; render(); };
+      f1.appendChild(b);
+    });
+    if (state.colCatExpanded) {
+      presentMore.forEach(function (name) {
+        var b = el("button", { class: "chip" + (state.colCatFilter === name ? " active" : "") }, escapeHtml(name));
+        b.onclick = function () { state.colCatFilter = name; render(); };
+        f1.appendChild(b);
+      });
+    }
+    if (presentMore.length > 0) {
+      var moreToggle = el("button", { class: "ghostBtn" }, state.colCatExpanded ? "收合 ▲" : "更多類型 ▾");
+      moreToggle.onclick = function () { state.colCatExpanded = !state.colCatExpanded; render(); };
+      f1.appendChild(moreToggle);
+    }
+    frag.appendChild(f1);
+
+    frag.appendChild(el("div", { class: "filterGroupLabel mono" }, "成員喜愛的店"));
+    var f2 = el("div", { class: "filters" });
+    ["全部", "最愛"].concat(state.people.map(function (p) { return p.name; })).forEach(function (name) {
+      var b = el("button", { class: "chip tagChip" + (state.colTagFilter === name ? " active" : "") }, escapeHtml(name));
+      b.onclick = function () { state.colTagFilter = name; render(); };
+      f2.appendChild(b);
+    });
+    frag.appendChild(f2);
+
+    var list = filteredCollection();
+    var lw = el("div", { class: "card" });
+    lw.appendChild(el("div", { class: "sectionLabel mono" }, list.length + " 間符合篩選"));
+    if (state.restaurants.length === 0) lw.appendChild(el("div", { class: "emptyList" }, "還沒有餐廳,點右上角「＋」新增第一間吧"));
+    list.forEach(function (r) {
+      var row = el("div", { class: "row" });
+      var main = el("div", { class: "rowMain" });
+      main.appendChild(el("div", { class: "rowName" }, escapeHtml(r.name) + (r.x != null ? " <span style='font-size:11px;color:#5C7A6B'>📍</span>" : "")));
+      main.appendChild(el("div", { class: "rowMeta mono" }, escapeHtml(r.category) + " ・ " + priceLabel(r.price) + (r.note ? " ・ " + escapeHtml(r.note) : "")));
+      if (r.tagIds && r.tagIds.length) {
+        var who = el("div", { class: "rowWho" });
+        r.tagIds.forEach(function (pid) {
+          var p = personById(pid); if (!p) return;
+          var d = el("span", { class: "dot", style: "background:" + p.color }, initials(p.name));
+          d.title = p.name; who.appendChild(d);
+        });
+        main.appendChild(who);
+      }
+      row.appendChild(main);
+      var favBtn = el("button", { class: "iconBtn fav" + (r.favorite ? " active" : "") }, r.favorite ? "★" : "☆");
+      favBtn.onclick = function () { toggleFavorite(r.id); };
+      row.appendChild(favBtn);
+      var delBtn = el("button", { class: "iconBtn" }, "🗑");
+      delBtn.onclick = function () { removeRestaurant(r.id); };
+      row.appendChild(delBtn);
+      lw.appendChild(row);
+    });
+    frag.appendChild(lw);
+    return frag;
+  }
+  function filteredCollection() {
+    var list = state.restaurants;
+    if (state.colCatFilter !== "全部") list = list.filter(function (r) { return r.category === state.colCatFilter; });
+    if (state.colTagFilter === "最愛") list = list.filter(function (r) { return r.favorite; });
+    else if (state.colTagFilter !== "全部") {
+      var person = state.people.filter(function (p) { return p.name === state.colTagFilter; })[0];
+      if (person) list = list.filter(function (r) { return r.tagIds.indexOf(person.id) !== -1; });
+    }
+    return list;
+  }
+
+  // ---------- GROUPS TAB ----------
+  function renderGroupsTab() {
+    if (state.groupsSelectedId) return renderGroupDetail(state.groupsSelectedId);
+    var frag = document.createDocumentFragment();
+    var lw = el("div", { class: "card" });
+    if (state.groups.length === 0) lw.appendChild(el("div", { class: "emptyList" }, "還沒有群組,點右上角「＋」新增"));
+    state.groups.forEach(function (g) {
+      var row = el("div", { class: "groupListRow" });
+      row.appendChild(el("div", { class: "gName" }, escapeHtml(g.name)));
+      row.appendChild(el("div", { class: "gCount mono" }, g.personIds.length + " 人"));
+      row.appendChild(el("div", { class: "arrow" }, "›"));
+      row.onclick = function () { state.groupsSelectedId = g.id; render(); };
+      lw.appendChild(row);
+    });
+    frag.appendChild(lw);
+    return frag;
+  }
+  function renderGroupDetail(groupId) {
+    var g = groupById(groupId);
+    var frag = document.createDocumentFragment();
+    if (!g) { frag.appendChild(el("div", { class: "emptyList" }, "找不到這個群組")); return frag; }
+
+    var delBtn = el("button", { class: "ghostBtn", style: "margin-bottom:14px;color:#B23A2E;border-color:#B23A2E" }, "🗑 刪除這個群組");
+    delBtn.onclick = function () { deleteGroup(groupId); };
+    frag.appendChild(delBtn);
+
+    var lw = el("div", { class: "card" });
+    var members = g.personIds.map(personById).filter(Boolean);
+    if (members.length === 0) lw.appendChild(el("div", { class: "emptyList" }, "這個群組還沒有成員,點右上角「＋」新增"));
+    members.forEach(function (p) {
+      var card = el("div", { class: "memberCard" });
+      var head = el("div", { class: "memberHead" });
+      head.appendChild(el("div", { class: "avatar", style: "background:" + p.color }, initials(p.name)));
+      head.appendChild(el("div", { class: "memberName" }, escapeHtml(p.name)));
+            var editBtn = el("button", { class: "iconBtn" }, "✎");
+      editBtn.onclick = function () { openAddPersonModal(groupId, p); };
+      head.appendChild(editBtn);
+      card.appendChild(head);
+      var tags = el("div", { class: "prefTags" });
+      (p.prefs || []).forEach(function (pr) { tags.appendChild(el("span", { class: "prefTag" }, escapeHtml(pr))); });
+      var tagCount = state.restaurants.filter(function (r) { return r.tagIds.indexOf(p.id) !== -1; }).length;
+      tags.appendChild(el("span", { class: "prefTag" }, "❤ " + tagCount + " 間喜愛的店"));
+      card.appendChild(tags);
+      var memberActions = el("div", { style: "display:flex;gap:8px;margin-top:10px" });
+      var rmBtn = el("button", { class: "ghostBtn" }, "移出此群組");
+      rmBtn.onclick = function () { removePersonFromGroup(groupId, p.id); };
+      var delBtn = el("button", { class: "ghostBtn", style: "color:#B23A2E;border-color:#B23A2E" }, "完全刪除");
+      delBtn.onclick = function () { deletePersonGlobally(p.id); };
+      memberActions.appendChild(rmBtn); memberActions.appendChild(delBtn);
+      card.appendChild(memberActions);
+      lw.appendChild(card);
+    });
+    frag.appendChild(lw);
+
+    var others = state.people.filter(function (p) { return g.personIds.indexOf(p.id) === -1; });
+    if (others.length > 0) {
+      var addExistBtn = el("button", { class: "browseToggle" }, "從其他成員中加入既有的人 ▾");
+      var listWrap = el("div", { class: "browseList", style: "display:none" });
+      others.forEach(function (p) {
+        var row = el("div", { class: "browseRow" });
+        row.appendChild(el("span", {}, escapeHtml(p.name)));
+        var addBtn = el("button", { class: "ghostBtn", style: "margin-left:auto" }, "加入");
+        addBtn.onclick = function () { addExistingPersonToGroup(groupId, p.id); };
+        row.appendChild(addBtn);
+        listWrap.appendChild(row);
+      });
+      addExistBtn.onclick = function () { listWrap.style.display = listWrap.style.display === "none" ? "block" : "none"; };
+      frag.appendChild(addExistBtn);
+      frag.appendChild(listWrap);
+    }
+    return frag;
+  }
+
+  // ---------- DECISION TAB ----------
+  function renderDecisionTab() {
+    var frag = document.createDocumentFragment();
+    var seg = el("div", { class: "segControl" });
+    ["抽籤", "系統建議", "協作場次"].forEach(function (v) {
+      var b = el("button", { class: "segBtn" + (state.decMode === v ? " active" : "") }, v);
+      b.onclick = function () { state.decMode = v; state.drawn = null; render(); };
+      seg.appendChild(b);
+    });
+    frag.appendChild(seg);
+
+    if (state.decMode === "抽籤") frag.appendChild(renderSpinMode());
+    else if (state.decMode === "系統建議") frag.appendChild(renderSuggestMode());
+    else frag.appendChild(renderCollabMode());
+
+    if (state.decMode !== "協作場次" && state.history.length > 0) {
+      var hw = el("div", { class: "historyList" });
+      hw.appendChild(el("div", { class: "sectionLabel mono" }, "最近決定"));
+      state.history.slice(0, 5).forEach(function (h) {
+        var d = new Date(h.ts);
+        var timeStr = (d.getMonth() + 1) + "/" + d.getDate();
+        hw.appendChild(el("div", { class: "histRow" }, "<span>" + escapeHtml(h.name) + " (" + escapeHtml(h.category) + ")</span><span>" + timeStr + "</span>"));
+      });
+      frag.appendChild(hw);
+    }
+    return frag;
+  }
+
+  function appendShareBtn(container, restaurant, subtitle, label) {
+    var shareBtn = el("button", { class: "ghostBtn", style: "display:block;margin:10px auto 0;" }, "📤 輸出分享圖片");
+    shareBtn.onclick = function () { shareResultImage(restaurant, subtitle, label); };
+    container.appendChild(shareBtn);
+  }
+
+  function renderPickList(items, selectedIds, onToggle) {
+    var wrap = el("div", { class: "pickList" });
+    if (items.length === 0) { wrap.appendChild(el("div", { class: "emptyList" }, "還沒有店家可以選")); return wrap; }
+    items.forEach(function (r) {
+      var selected = selectedIds.indexOf(r.id) !== -1;
+      var row = el("div", { class: "pickRow" + (selected ? " selected" : "") });
+      var main = el("div", {});
+      main.appendChild(el("div", { class: "prName" }, escapeHtml(r.name)));
+      main.appendChild(el("div", { class: "prMeta mono" }, escapeHtml(r.category) + (r.note ? " ・ " + escapeHtml(r.note) : "")));
+      var check = el("div", { class: "prCheck" }, "✓");
+      row.appendChild(main); row.appendChild(check);
+      row.onclick = function () { onToggle(r.id); };
+      wrap.appendChild(row);
+    });
+    return wrap;
+  }
+
+  function renderSpinMode() {
+    var frag = document.createDocumentFragment();
+
+    var card = el("div", { class: "pickerCard" });
+    var head = el("div", { class: "pickerHead" });
+    head.appendChild(el("div", { class: "phTitle mono" }, "候選名單"));
+    head.appendChild(el("div", { class: "phCount mono" }, state.pool.length + " 間"));
+    card.appendChild(head);
+
+    var mrow = el("div", { class: "poolMemberRow" });
+    state.people.forEach(function (p) {
+      var favCount = state.restaurants.filter(function (r) { return r.tagIds.indexOf(p.id) !== -1; }).length;
+      var chip = el("div", { class: "memberChip" + (personPoolActive(p.id) ? " active" : "") }, "<span class='dot' style='background:" + p.color + ";width:16px;height:16px;font-size:8px'>" + initials(p.name) + "</span><span>" + escapeHtml(p.name) + "(" + favCount + ")</span>");
+      chip.onclick = function () { addPersonFavoritesToPool(p.id); };
+      mrow.appendChild(chip);
+    });
+    card.appendChild(mrow);
+
+    if (state.pool.length > 0) {
+      var pills = el("div", { class: "selectedPillsRow" });
+      poolRestaurants().forEach(function (r) {
+        var pill = el("span", { class: "selectedPill" }, escapeHtml(r.name));
+        var rm = el("button", {}, "✕");
+        rm.onclick = function () { togglePool(r.id); };
+        pill.appendChild(rm);
+        pills.appendChild(pill);
+      });
+      card.appendChild(pills);
+    }
+
+    var browseBtn = el("button", { class: "ghostBtn", style: "margin-top:12px" }, state.browseOpen ? "收合店家列表 ▲" : "顯示所有店家 ▾");
+    browseBtn.onclick = function () { state.browseOpen = !state.browseOpen; render(); };
+    card.appendChild(browseBtn);
+
+    if (state.browseOpen) card.appendChild(renderPickList(state.restaurants, state.pool, togglePool));
+
+    frag.appendChild(card);
+
+    var wheelWrap = el("div", { class: "wheelWrap" });
+    var stack = el("div", { class: "wheelStack" });
+    stack.appendChild(el("div", { class: "wheelPointer" }, "▼"));
+    stack.appendChild(el("canvas", { id: "wheelCanvas", width: "280", height: "280" }));
+    stack.appendChild(el("div", { class: "wheelHub" }));
+    wheelWrap.appendChild(stack);
+    frag.appendChild(wheelWrap);
+
+    var spinBtn = el("button", { class: "primaryBtn" }, state.spinning ? "轉動中…" : "🎡 轉動轉盤");
+    spinBtn.disabled = state.spinning || poolRestaurants().length < 2;
+    spinBtn.onclick = spinWheel;
+    frag.appendChild(spinBtn);
+    if (poolRestaurants().length < 2 && poolRestaurants().length > 0) {
+      frag.appendChild(el("div", { class: "excludeNote", style: "text-align:center;margin-top:-12px" }, "候選名單至少要 2 間才能轉盤"));
+    }
+
+    if (state.drawn) {
+      var stage = el("div", { class: "ticketStage" });
+      var t = el("div", { class: "ticket" });
+      t.appendChild(el("div", { class: "ticketTop mono" }, "<span>NO. " + ticketNo + "</span><span>轉盤結果</span>"));
+      t.appendChild(el("div", { class: "ticketLabel" }, "今晚就吃這間"));
+      t.appendChild(el("div", { class: "ticketName" }, escapeHtml(state.drawn.name)));
+      t.appendChild(el("div", { class: "ticketMeta mono" }, escapeHtml(state.drawn.category) + " ・ " + priceLabel(state.drawn.price)));
+      if (state.drawn.tagIds && state.drawn.tagIds.length) {
+        var whoWrap = el("div", { class: "ticketWho" });
+        state.drawn.tagIds.forEach(function (pid) {
+          var p = personById(pid); if (!p) return;
+          whoWrap.appendChild(el("span", { class: "whoTag", style: "background:" + p.color }, escapeHtml(p.name)));
+        });
+        t.appendChild(whoWrap);
+      }
+      stage.appendChild(t);
+      frag.appendChild(stage);
+      appendShareBtn(frag, state.drawn, "轉盤結果", "今晚就吃這間");
+    }
+    return frag;
+  }
+
+  function renderSuggestMode() {
+    var frag = document.createDocumentFragment();
+    frag.appendChild(el("div", { class: "sectionLabel mono" }, "點一下切換:一般 → 想吃(綠) → 不吃(紅)"));
+    var f = el("div", { class: "filters" });
+    function makeCatChip(c) {
+      var st = state.catState[c];
+      var cls = "chip" + (st === "include" ? " active" : "") + (st === "exclude" ? " excl" : "");
+      var b = el("button", { class: cls }, escapeHtml(c));
+      b.onclick = function () { cycleCatState(c); };
+      return b;
+    }
+    COMMON_CATEGORIES.forEach(function (c) { f.appendChild(makeCatChip(c)); });
+    if (state.suggestCatExpanded) MORE_CATEGORIES.forEach(function (c) { f.appendChild(makeCatChip(c)); });
+    if (MORE_CATEGORIES.length > 0) {
+      var moreToggle = el("button", { class: "ghostBtn" }, state.suggestCatExpanded ? "收合 ▲" : "更多類型 ▾");
+      moreToggle.onclick = function () { state.suggestCatExpanded = !state.suggestCatExpanded; render(); };
+      f.appendChild(moreToggle);
+    }
+    frag.appendChild(f);
+    var auto = recentCategories(1);
+    if (auto.length > 0) frag.appendChild(el("div", { class: "excludeNote" }, "🕓 上一餐吃過「" + escapeHtml(auto[0]) + "」,建議時會優先避開(除非你手動勾選想吃)"));
+    var btn = el("button", { class: "primaryBtn" }, "✨ 給我建議");
+    btn.onclick = getSuggestion;
+    frag.appendChild(btn);
+    if (state.suggestion) {
+      var stage = el("div", { class: "ticketStage" });
+      var t = el("div", { class: "ticket" });
+      t.appendChild(el("div", { class: "ticketTop mono" }, "<span>NO. " + ticketNo + "</span><span>系統建議</span>"));
+      t.appendChild(el("div", { class: "ticketLabel" }, "這餐推薦"));
+      t.appendChild(el("div", { class: "ticketName" }, escapeHtml(state.suggestion.name)));
+      t.appendChild(el("div", { class: "ticketMeta mono" }, escapeHtml(state.suggestion.category) + " ・ " + priceLabel(state.suggestion.price)));
+      if (state.suggestion.note) t.appendChild(el("div", { class: "ticketNote" }, escapeHtml(state.suggestion.note)));
+      stage.appendChild(t);
+      frag.appendChild(stage);
+      appendShareBtn(frag, state.suggestion, "系統建議", "這餐推薦");
+    }
+    return frag;
+  }
+
+  // ---------- COLLABORATIVE SESSION MODE ----------
+  function collabPresetDeadline(key) {
+    var now = new Date(), d;
+    if (key === "1h") return Date.now() + 60 * 60 * 1000;
+    if (key === "tonight") {
+      d = new Date(now); d.setHours(20, 0, 0, 0);
+      if (d.getTime() <= Date.now()) d.setDate(d.getDate() + 1);
+      return d.getTime();
+    }
+    if (key === "tomorrownoon") {
+      d = new Date(now); d.setDate(d.getDate() + 1); d.setHours(12, 0, 0, 0);
+      return d.getTime();
+    }
+    if (key === "weekend") {
+      d = new Date(now);
+      var day = d.getDay();
+      var diff = (6 - day + 7) % 7; if (diff === 0) diff = 7;
+      d.setDate(d.getDate() + diff); d.setHours(12, 0, 0, 0);
+      return d.getTime();
+    }
+    return collabDefaultDeadline();
+  }
+  function toDatetimeLocalValue(ms) {
+    var d = new Date(ms);
+    var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+    return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + "T" + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  }
+  function formatDeadlineDisplay(ms) {
+    if (!ms) return "尚未設定";
+    var d = new Date(ms);
+    var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+    var weekdays = ["日", "一", "二", "三", "四", "五", "六"];
+    return (d.getMonth() + 1) + "/" + d.getDate() + "(" + weekdays[d.getDay()] + ") " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+  }
+
+  function renderCollabMode() {
+    var frag = document.createDocumentFragment();
+    var step = state.collab.step;
+    if (step === "chooseAudience") frag.appendChild(renderCollabChooseAudience());
+    else if (step === "setup") frag.appendChild(renderCollabSetup());
+    else if (step === "invite") frag.appendChild(renderCollabInvite());
+    else if (step === "active") frag.appendChild(renderCollabActive());
+    else frag.appendChild(renderCollabResult());
+    return frag;
+  }
+
+  function renderCollabChooseAudience() {
+    var frag = document.createDocumentFragment();
+    frag.appendChild(el("div", { class: "sectionLabel mono" }, "這次要找誰一起決定?"));
+    frag.appendChild(el("div", { class: "excludeNote" }, "選群組只是快速把該群組的標籤店家拉進候選,真正會加入場次、按完成的是點連結進來的人,跟選哪個群組無關"));
+    if (state.groups.length > 0) {
+      state.groups.forEach(function (g) {
+        var b = el("button", { class: "bigChoiceBtn" }, "<span class='bcTitle'>👥 " + escapeHtml(g.name) + "</span><span class='bcDesc'>已存的群組 · " + g.personIds.length + " 個標籤</span>");
+        b.onclick = function () { collabChooseGroup(g.id); };
+        frag.appendChild(b);
+      });
+    }
+    var adhocBtn = el("button", { class: "bigChoiceBtn" }, "<span class='bcTitle'>🔗 自由邀請</span><span class='bcDesc'>不借用任何標籤,用連結臨時邀請大家加入</span>");
+    adhocBtn.onclick = collabChooseAdhoc;
+    frag.appendChild(adhocBtn);
+    return frag;
+  }
+
+  function renderCollabSetup() {
+    var frag = document.createDocumentFragment();
+    frag.appendChild(el("div", { class: "sectionLabel mono" }, "決定這次的決策模式"));
+    var modeRow = el("div", { class: "filters" });
+    [["random", "🎡 直接轉盤"], ["vote_first", "✅ 先表態再轉盤"]].forEach(function (pair) {
+      var b = el("button", { class: "chip" + (state.collab.decisionMode === pair[0] ? " active" : "") }, pair[1]);
+      b.onclick = function () { state.collab.decisionMode = pair[0]; render(); };
+      modeRow.appendChild(b);
+    });
+    frag.appendChild(modeRow);
+    frag.appendChild(el("div", { class: "excludeNote" },
+      state.collab.decisionMode === "vote_first"
+        ? "截止前大家隨時可以對候選店家表示可接受/不可接受,時間到時,只有沒人反對的店家會進最後轉盤"
+        : "截止前大家把候選店家加完,時間到直接進轉盤"
+    ));
+
+    frag.appendChild(el("div", { class: "sectionLabel mono", style: "margin-top:16px" }, "設定截止時間(未來 7 天內)"));
+    var presetRow = el("div", { class: "filters" });
+    [["1h", "1 小時後"], ["tonight", "今晚 8 點"], ["tomorrownoon", "明天中午"], ["weekend", "本週末"]].forEach(function (pair) {
+      var b = el("button", { class: "chip" }, pair[1]);
+      b.onclick = function () { state.collab.deadlineAt = collabPresetDeadline(pair[0]); render(); };
+      presetRow.appendChild(b);
+    });
+    frag.appendChild(presetRow);
+
+    var dtWrap = el("div", { class: "field", style: "max-width:380px;margin-top:10px" });
+    dtWrap.appendChild(el("label", {}, "或自訂時間"));
+    var dtInput = el("input", { type: "datetime-local" });
+    dtInput.style.cssText = "width:100%;border:1px solid #3A3F4C;background:#20232B;color:#F3ECDD;border-radius:8px;padding:10px 11px;font-size:15px;";
+    dtInput.value = toDatetimeLocalValue(state.collab.deadlineAt || collabDefaultDeadline());
+    dtInput.min = toDatetimeLocalValue(Date.now() + 60000);
+    dtInput.max = toDatetimeLocalValue(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    dtInput.onchange = function (e) { var t = new Date(e.target.value).getTime(); if (!isNaN(t)) { state.collab.deadlineAt = t; render(); } };
+    dtWrap.appendChild(dtInput);
+    frag.appendChild(dtWrap);
+
+    frag.appendChild(el("div", { class: "excludeNote", style: "margin-top:6px" }, "目前設定:" + formatDeadlineDisplay(state.collab.deadlineAt) + "。時間一到,系統會依候選店家狀況自動結算(原型用「立即結算」按鈕模擬)。"));
+
+    var startBtn = el("button", { class: "primaryBtn", style: "margin-top:16px" }, "建立協作場次");
+    startBtn.onclick = collabEnterInvite;
+    frag.appendChild(startBtn);
+    var backBtn = el("button", { class: "ghostBtn", style: "display:block;margin:0 auto" }, "← 換人參加");
+    backBtn.onclick = function () { state.collab.step = "chooseAudience"; render(); };
+    frag.appendChild(backBtn);
+    return frag;
+  }
+
+  function renderCollabInvite() {
+    var frag = document.createDocumentFragment();
+    var card = el("div", { class: "card" });
+    card.appendChild(el("div", { class: "sectionLabel mono" }, "邀請連結"));
+    var box = el("div", { class: "row", style: "flex-direction:column;align-items:stretch;gap:8px" });
+    box.appendChild(el("div", { class: "rowMeta mono" }, "https://meal-app.example/join/•••••• <span class='comingSoon'>尚未開放</span>"));
+    box.appendChild(el("div", { class: "rowMeta" }, "連結有效期跟著這次場次的截止時間走,目前是 " + formatDeadlineDisplay(state.collab.deadlineAt) + ",共同編輯模式下可自由轉傳"));
+    var copyBtn = el("button", { class: "ghostBtn" }, "複製連結");
+    copyBtn.disabled = true; copyBtn.style.opacity = "0.4";
+    box.appendChild(copyBtn);
+    card.appendChild(box);
+    frag.appendChild(card);
+    frag.appendChild(el("div", { class: "excludeNote", style: "margin-top:10px" }, "💡 這個功能需要接上資料庫才能真的產生可分享的連結,目前是畫面預覽。你可以直接往下走,體驗接下來的候選名單/表態/結算流程。"));
+    var nextBtn = el("button", { class: "primaryBtn", style: "margin-top:14px" }, "繼續預覽下一步 →");
+    nextBtn.onclick = collabEnterActive;
+    frag.appendChild(nextBtn);
+    var backBtn = el("button", { class: "ghostBtn", style: "display:block;margin:10px auto 0;" }, "← 上一步");
+    backBtn.onclick = function () { state.collab.step = "setup"; render(); };
+    frag.appendChild(backBtn);
+    return frag;
+  }
+
+  function renderCollabActive() {
+    var frag = document.createDocumentFragment();
+    var remain = Math.max(0, state.collab.deadlineAt - Date.now());
+    var totalMin = Math.floor(remain / 60000);
+    var days = Math.floor(totalMin / 1440), hours = Math.floor((totalMin % 1440) / 60), mins = totalMin % 60;
+    var remainStr = days > 0 ? (days + "天" + hours + "小時") : (hours > 0 ? (hours + "小時" + mins + "分") : (mins + "分鐘"));
+    frag.appendChild(el("div", { class: "sectionLabel mono" }, "距離截止 " + formatDeadlineDisplay(state.collab.deadlineAt) + " 還剩 " + remainStr));
+
+    var card = el("div", { class: "pickerCard" });
+    var head = el("div", { class: "pickerHead" });
+    head.appendChild(el("div", { class: "phTitle mono" }, "候選店家"));
+    head.appendChild(el("div", { class: "phCount mono" }, state.collab.pool.length + " 間"));
+    card.appendChild(head);
+
+    var tags = collabGroupTags();
+    if (tags.length > 0) {
+      var mrow = el("div", { class: "poolMemberRow" });
+      tags.forEach(function (p) {
+        var favIds = state.restaurants.filter(function (r) { return r.tagIds.indexOf(p.id) !== -1; }).map(function (r) { return r.id; });
+        var allIn = favIds.length > 0 && favIds.every(collabPoolHasRestaurant);
+        var chip = el("div", { class: "memberChip" + (allIn ? " active" : "") }, "<span class='dot' style='background:" + p.color + ";width:16px;height:16px;font-size:8px'>" + initials(p.name) + "</span><span>加入" + escapeHtml(p.name) + "標記(" + favIds.length + ")</span>");
+        chip.onclick = function () {
+          favIds.forEach(function (id) {
+            var has = collabPoolHasRestaurant(id);
+            if (allIn && has) collabToggleRestaurantNoRender(id);
+            else if (!allIn && !has) collabToggleRestaurantNoRender(id);
+          });
+          render();
+        };
+        mrow.appendChild(chip);
+      });
+      card.appendChild(mrow);
+    } else if (state.collab.audienceType === "adhoc") {
+      card.appendChild(el("div", { class: "excludeNote" }, "自由邀請模式沒有現成標籤,直接從下面清單挑選,或臨時新增店家"));
+    }
+
+    if (state.collab.pool.length > 0) {
+      var pills = el("div", { class: "selectedPillsRow" });
+      state.collab.pool.forEach(function (item) {
+        var pill = el("span", { class: "selectedPill" }, escapeHtml(item.name) + (item.isAdhoc ? " <span class='comingSoon'>本場次</span>" : ""));
+        var rm = el("button", {}, "✕");
+        rm.onclick = function () { collabRemovePoolItem(item.id); };
+        pill.appendChild(rm);
+        pills.appendChild(pill);
+      });
+      card.appendChild(pills);
+    }
+
+    var adhocWrap = el("div", { style: "margin-top:14px;padding-top:14px;border-top:1px solid #262B36" });
+    adhocWrap.appendChild(el("div", { class: "filterGroupLabel mono" }, "臨時新增本場次專用的店(不會存進任何人的收藏)"));
+    var adhocRow = el("div", { style: "display:flex;gap:8px;flex-wrap:wrap;align-items:center" });
+    var adhocInput = el("input", { placeholder: "店名" });
+    adhocInput.style.cssText = "flex:1;min-width:140px;border:1px solid #3A3F4C;background:#20232B;color:#F3ECDD;border-radius:8px;padding:9px 11px;font-size:14px;";
+    adhocInput.value = state.collab.adhocForm.name;
+    adhocInput.oninput = function (e) { state.collab.adhocForm.name = e.target.value; };
+    adhocRow.appendChild(adhocInput);
+    var adhocCatSelect = el("select", {});
+    adhocCatSelect.style.cssText = "border:1px solid #3A3F4C;background:#20232B;color:#F3ECDD;border-radius:8px;padding:9px 8px;font-size:14px;";
+    CATEGORIES.forEach(function (c) {
+      var opt = el("option", { value: c }, c);
+      if (c === state.collab.adhocForm.category) opt.setAttribute("selected", "selected");
+      adhocCatSelect.appendChild(opt);
+    });
+    adhocCatSelect.onchange = function (e) { state.collab.adhocForm.category = e.target.value; };
+    adhocRow.appendChild(adhocCatSelect);
+    var adhocAddBtn = el("button", { class: "ghostBtn" }, "＋ 加入");
+    adhocAddBtn.onclick = collabAddAdhocCandidate;
+    adhocRow.appendChild(adhocAddBtn);
+    adhocWrap.appendChild(adhocRow);
+    card.appendChild(adhocWrap);
+
+    var browseBtn = el("button", { class: "ghostBtn", style: "margin-top:12px" }, state.collab.browseOpen ? "收合店家列表 ▲" : "顯示所有店家 ▾");
+    browseBtn.onclick = function () { state.collab.browseOpen = !state.collab.browseOpen; render(); };
+    card.appendChild(browseBtn);
+    if (state.collab.browseOpen) {
+      var linkedIds = state.collab.pool.filter(function (i) { return !i.isAdhoc; }).map(function (i) { return i.restaurantId; });
+      card.appendChild(renderPickList(state.restaurants, linkedIds, collabToggleRestaurant));
+    }
+    frag.appendChild(card);
+
+    if (state.collab.decisionMode === "vote_first" && state.collab.pool.length > 0) {
+      frag.appendChild(el("div", { class: "sectionLabel mono", style: "margin-top:14px" }, "表態(示範:單機預覽,正式版每人各自在自己手機表態)"));
+      state.collab.pool.forEach(function (item) {
+        var v = state.collab.votes[item.id] || { accept: 0, reject: 0 };
+        var vrow = el("div", { class: "poolItem" }, "<span>" + escapeHtml(item.name) + " <span class='rowMeta mono' style='margin-left:6px'>✅" + v.accept + " ❌" + v.reject + "</span></span>");
+        var btnWrap = el("span", { style: "margin-left:auto;display:flex;gap:6px" });
+        var okBtn = el("button", { class: "ghostBtn" }, "✅");
+        okBtn.onclick = function () { collabVote(item.id, true); };
+        var noBtn = el("button", { class: "ghostBtn" }, "❌");
+        noBtn.onclick = function () { collabVote(item.id, false); };
+        btnWrap.appendChild(okBtn); btnWrap.appendChild(noBtn);
+        vrow.appendChild(btnWrap);
+        frag.appendChild(vrow);
+      });
+    }
+
+    frag.appendChild(el("div", { class: "sectionLabel mono", style: "margin-top:14px" }, "參與者(選填,主要給彼此心安,真正結算看時間)"));
+    var pCard = el("div", { class: "card" });
+    state.collab.participants.forEach(function (p) {
+      var row = el("div", { class: "row" });
+      var main = el("div", { class: "rowMain" }, "<span class='dot' style='background:" + p.color + "'>" + initials(p.name) + "</span> " + escapeHtml(p.name) + (p.isGuest ? " <span class='rowMeta'>(訪客)</span>" : ""));
+      row.appendChild(main);
+      var readyBtn = el("button", { class: "ghostBtn" }, p.ready ? "✅ 已完成" : "尚未完成");
+      if (p.ready) readyBtn.style.color = "#5C7A6B";
+      readyBtn.onclick = function () { collabToggleReady(p.id); };
+      row.appendChild(readyBtn);
+      pCard.appendChild(row);
+    });
+    if (state.collab.participants.length === 0) pCard.appendChild(el("div", { class: "emptyList" }, "還沒有人加入,先模擬新增訪客測試流程"));
+    frag.appendChild(pCard);
+    var addGuestBtn = el("button", { class: "ghostBtn" }, "+ 模擬新增訪客");
+    addGuestBtn.onclick = collabAddGuestPreview;
+    frag.appendChild(addGuestBtn);
+
+    var forceBtn = el("button", { class: "primaryBtn", style: "margin-top:14px" }, "⏱ 立即結算(測試用,模擬時間到)");
+    forceBtn.onclick = collabForceSettleNow;
+    frag.appendChild(forceBtn);
+    frag.appendChild(el("div", { class: "excludeNote", style: "text-align:center;margin-top:-10px" }, "正式版時間到會自動結算,這顆按鈕只是原型 demo 用"));
+    return frag;
+  }
+
+  function renderCollabResult() {
+    var frag = document.createDocumentFragment();
+
+    if (state.collab.noResult) {
+      var stage0 = el("div", { class: "ticketStage" });
+      var t0 = el("div", { class: "ticket" });
+      t0.appendChild(el("div", { class: "ticketTop mono" }, "<span>NO. " + ticketNo + "</span><span>協作場次結果</span>"));
+      t0.appendChild(el("div", { class: "ticketEmpty" }, "<span class='big'>🤷</span>時間到了,候選名單是空的,這次沒有結果"));
+      stage0.appendChild(t0);
+      frag.appendChild(stage0);
+    } else {
+      var wheelWrap = el("div", { class: "wheelWrap" });
+      var stack = el("div", { class: "wheelStack" });
+      stack.appendChild(el("div", { class: "wheelPointer" }, "▼"));
+      stack.appendChild(el("canvas", { id: "collabWheelCanvas", width: "280", height: "280" }));
+      stack.appendChild(el("div", { class: "wheelHub" }));
+      wheelWrap.appendChild(stack);
+      frag.appendChild(wheelWrap);
+      if (state.collab.spinning) frag.appendChild(el("div", { class: "sectionLabel mono", style: "text-align:center" }, "轉動中…"));
+      if (state.collab.winner && !state.collab.spinning) {
+        var stage = el("div", { class: "ticketStage" });
+        var t = el("div", { class: "ticket" });
+        t.appendChild(el("div", { class: "ticketTop mono" }, "<span>NO. " + ticketNo + "</span><span>協作場次結果</span>"));
+        t.appendChild(el("div", { class: "ticketLabel" }, "大家決定吃這間"));
+        t.appendChild(el("div", { class: "ticketName" }, escapeHtml(state.collab.winner.name)));
+        t.appendChild(el("div", { class: "ticketMeta mono" }, escapeHtml(state.collab.winner.category) + " ・ " + priceLabel(state.collab.winner.price) + (state.collab.winner.isAdhoc ? " ・ <span class='comingSoon'>本場次新增</span>" : "")));
+        stage.appendChild(t);
+        frag.appendChild(stage);
+        appendShareBtn(frag, state.collab.winner, "協作場次結果", "大家決定吃這間");
+      }
+    }
+
+    if (state.collab.participants.length > 0 && !state.collab.savedAsGroup) {
+      var saveBtn = el("button", { class: "ghostBtn", style: "display:block;margin:14px auto 0;" }, "💾 把這次的人存成新群組");
+      saveBtn.onclick = collabSaveParticipantsAsGroup;
+      frag.appendChild(saveBtn);
+    }
+    if (state.collab.savedAsGroup) {
+      frag.appendChild(el("div", { class: "excludeNote", style: "text-align:center" }, "✅ 已存成新群組,可以到「群組」分頁看到"));
+    }
+
+    var resetBtn = el("button", { class: "ghostBtn", style: "display:block;margin:16px auto 0;" }, "🔄 開始新的協作場次");
+    resetBtn.onclick = function () { collabReset(); render(); };
+    frag.appendChild(resetBtn);
+    return frag;
+  }
+
+  // ---------- MORE TAB ----------
+  function renderMoreTab() {
+    var frag = document.createDocumentFragment();
+    var items = [
+      { key: "privacy", label: "🔒 隱私權政策", ready: false },
+      { key: "terms", label: "📄 服務條款", ready: false },
+      { key: "account", label: "👤 帳號設定", ready: false },
+      { key: "about", label: "ℹ️ 關於這個 App", ready: true },
+      { key: "feedback", label: "💬 意見回饋", ready: false }
+    ];
+    var group = el("div", { class: "moreGroup" });
+    items.forEach(function (it) {
+      var row = el("div", { class: "moreRow" }, "<span class='mrLabel'>" + it.label + (it.ready ? "" : " <span class='comingSoon'>尚未開放</span>") + "</span><span class='mrArrow'>›</span>");
+      row.onclick = function () {
+        if (!it.ready) { notReady(); return; }
+        state.morePanelOpen = state.morePanelOpen === it.key ? null : it.key;
+        render();
+      };
+      group.appendChild(row);
+      if (it.ready && state.morePanelOpen === it.key) {
+        group.appendChild(el("div", { class: "morePanel" }, "這是一個幫家人、朋友、同事一起決定要吃什麼的小工具。目前是原型階段,資料存在這個連結對應的裝置上;之後會接上正式帳號系統與資料庫,讓多人協作、即時同步都能真的運作。"));
+      }
+    });
+    frag.appendChild(group);
+    frag.appendChild(el("div", { class: "appMeta mono" }, "這餐吃什麼 · 原型版"));
+    return frag;
+  }
+
+  // ---------- MODAL ----------
+  function renderModal() {
+    var bg = el("div", { class: "modalBg" });
+    bg.onclick = function (e) { if (e.target === bg) { state.showModal = false; render(); } };
+    var modal = el("div", { class: "modal" });
+    modal.onclick = function (e) { e.stopPropagation(); };
+
+    if (state.modalType === "restaurant") {
+      var head = el("div", { class: "modalHead" }, "<span>" + (state.pendingLoc ? "在地圖新增地點" : "新增餐廳") + "</span>");
+      var closeBtn = el("button", {}, "✕");
+      closeBtn.onclick = function () { state.showModal = false; render(); };
+      head.appendChild(closeBtn);
+      modal.appendChild(head);
+
+      if (state.pendingLoc) {
+        var badge = el("div", { class: "locBadge" }, "<span>📍 已在地圖上標記位置</span>");
+        var clearBtn = el("button", {}, "移除標記");
+        clearBtn.onclick = function () { state.pendingLoc = null; render(); };
+        badge.appendChild(clearBtn);
+        modal.appendChild(badge);
+      }
+
+      var f1 = el("div", { class: "field" });
+      f1.appendChild(el("label", {}, "店名"));
+      var nameInput = el("input", { placeholder: "例如:阿霞火鍋" });
+      nameInput.value = state.form.name;
+      nameInput.oninput = function (e) { state.form.name = e.target.value; submitBtnRef.disabled = !state.form.name.trim(); };
+      f1.appendChild(nameInput);
+      modal.appendChild(f1);
+
+      var f2 = el("div", { class: "field" });
+      f2.appendChild(el("label", {}, "類型"));
+      var catRow = el("div", { class: "catRow" });
+      CATEGORIES.forEach(function (c) {
+        var cb = el("button", { class: "catChip" + (state.form.category === c ? " active" : "") }, escapeHtml(c));
+        cb.onclick = function () { state.form.category = c; render(); };
+        catRow.appendChild(cb);
+      });
+      f2.appendChild(catRow);
+      modal.appendChild(f2);
+
+      var f3 = el("div", { class: "field" });
+      f3.appendChild(el("label", {}, "價位"));
+      var priceRow = el("div", { class: "priceRow" });
+      [1, 2, 3].forEach(function (p) {
+        var pb = el("button", { class: "priceBtn" + (state.form.price === p ? " active" : "") }, "$".repeat(p));
+        pb.onclick = function () { state.form.price = p; render(); };
+        priceRow.appendChild(pb);
+      });
+      f3.appendChild(priceRow);
+      modal.appendChild(f3);
+
+      if (state.people.length > 0) {
+        var f5 = el("div", { class: "field" });
+        f5.appendChild(el("label", {}, "成員喜愛的店(可複選)"));
+        var mpRow = el("div", { class: "memberPickRow" });
+        state.people.forEach(function (p) {
+          var active = state.form.tagIds.indexOf(p.id) !== -1;
+          var mc = el("button", { class: "memberPickChip" + (active ? " active" : "") }, escapeHtml(p.name));
+          mc.onclick = function () {
+            if (active) state.form.tagIds = state.form.tagIds.filter(function (x) { return x !== p.id; });
+            else state.form.tagIds = state.form.tagIds.concat([p.id]);
+            render();
+          };
+          mpRow.appendChild(mc);
+        });
+        f5.appendChild(mpRow);
+        modal.appendChild(f5);
+      }
+
+      var f4 = el("div", { class: "field" });
+      f4.appendChild(el("label", {}, "備註(選填)"));
+      var noteInput = el("input", { placeholder: "例如:記得加辣" });
+      noteInput.value = state.form.note;
+      noteInput.oninput = function (e) { state.form.note = e.target.value; };
+      f4.appendChild(noteInput);
+      modal.appendChild(f4);
+
+      var submitBtnRef = el("button", { class: "submitBtn" }, "加入收藏");
+      submitBtnRef.disabled = !state.form.name.trim();
+      submitBtnRef.onclick = submitRestaurantForm;
+      modal.appendChild(submitBtnRef);
+
+    } else if (state.modalType === "person") {
+      var phead = el("div", { class: "modalHead" }, "<span>" + (state.personForm.id ? "編輯標籤" : "新增標籤") + "</span>");
+      var pclose = el("button", {}, "✕");
+      pclose.onclick = function () { state.showModal = false; render(); };
+      phead.appendChild(pclose);
+      modal.appendChild(phead);
+
+      modal.appendChild(el("div", { class: "excludeNote", style: "margin-bottom:14px" }, "💡 這是你自己的備忘標籤,幫店家標記「這可能是誰喜歡的」,不是真的帳號或身份。"));
+
+      var pf1 = el("div", { class: "field" });
+      pf1.appendChild(el("label", {}, "稱呼"));
+      var pNameInput = el("input", { placeholder: "例如:哥哥 / 媽媽" });
+      pNameInput.value = state.personForm.name;
+      pNameInput.oninput = function (e) { state.personForm.name = e.target.value; psubmitRef.disabled = !state.personForm.name.trim(); };
+      pf1.appendChild(pNameInput);
+      modal.appendChild(pf1);
+
+      var pf2 = el("div", { class: "field" });
+      pf2.appendChild(el("label", {}, "代表色"));
+      var colorRow = el("div", { class: "colorPick" });
+      PERSON_COLORS.forEach(function (c) {
+        var dot = el("div", { class: "colorDot" + (state.personForm.color === c ? " active" : ""), style: "background:" + c });
+        dot.onclick = function () { state.personForm.color = c; render(); };
+        colorRow.appendChild(dot);
+      });
+      pf2.appendChild(colorRow);
+      modal.appendChild(pf2);
+
+      var pf3 = el("div", { class: "field" });
+      pf3.appendChild(el("label", {}, "飲食偏好(可複選)"));
+      var prefRow = el("div", { class: "catRow" });
+      PREF_TAGS.forEach(function (p) {
+        var active = state.personForm.prefs.indexOf(p) !== -1;
+        var pc = el("button", { class: "catChip" + (active ? " active" : "") }, escapeHtml(p));
+        pc.onclick = function () {
+          if (active) state.personForm.prefs = state.personForm.prefs.filter(function (x) { return x !== p; });
+          else state.personForm.prefs = state.personForm.prefs.concat([p]);
+          render();
+        };
+        prefRow.appendChild(pc);
+      });
+      pf3.appendChild(prefRow);
+      modal.appendChild(pf3);
+
+      var psubmitRef = el("button", { class: "submitBtn" }, state.personForm.id ? "儲存變更" : "加入群組成員");
+      psubmitRef.disabled = !state.personForm.name.trim();
+      psubmitRef.onclick = submitPersonForm;
+      modal.appendChild(psubmitRef);
+
+    } else {
+      var ghead = el("div", { class: "modalHead" }, "<span>新增群組</span>");
+      var gclose = el("button", {}, "✕");
+      gclose.onclick = function () { state.showModal = false; render(); };
+      ghead.appendChild(gclose);
+      modal.appendChild(ghead);
+      var gf1 = el("div", { class: "field" });
+      gf1.appendChild(el("label", {}, "群組名稱"));
+      var gNameInput = el("input", { placeholder: "例如:同事 / 大學同學" });
+      gNameInput.value = state.groupForm.name;
+      gNameInput.oninput = function (e) { state.groupForm.name = e.target.value; gsubmitRef.disabled = !state.groupForm.name.trim(); };
+      gf1.appendChild(gNameInput);
+      modal.appendChild(gf1);
+      var gsubmitRef = el("button", { class: "submitBtn" }, "建立群組");
+      gsubmitRef.disabled = !state.groupForm.name.trim();
+      gsubmitRef.onclick = submitGroupForm;
+      modal.appendChild(gsubmitRef);
+    }
+
+    bg.appendChild(modal);
+    return bg;
+  }
+
+  var _renderInner = render;
+  render = function () {
+    try { _renderInner(); }
+    catch (e) {
+      var appEl = document.getElementById("app");
+      if (appEl) appEl.innerHTML = "<div style='min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#F3ECDD;background:#1B1E24;padding:20px;text-align:center;font-family:sans-serif;'><div style='font-size:16px;margin-bottom:8px;'>頁面發生錯誤</div><div style='font-size:12px;color:#8F97A8;'>" + String(e && e.message ? e.message : e) + "</div></div>";
+    }
+  };
+
+  try {
+    load();
+  } catch (e) {
+    var appEl2 = document.getElementById("app");
+    if (appEl2) appEl2.innerHTML = "<div style='min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#F3ECDD;background:#1B1E24;padding:20px;text-align:center;font-family:sans-serif;'><div style='font-size:16px;margin-bottom:8px;'>頁面發生錯誤</div><div style='font-size:12px;color:#8F97A8;'>" + String(e && e.message ? e.message : e) + "</div></div>";
+  }
+})();
+</script>
+</body>
+</html>
