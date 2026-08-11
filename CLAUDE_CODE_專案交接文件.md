@@ -66,7 +66,7 @@ v2 版本原本設計「人」(例如「哥哥」)是一種特殊的標籤,帶�
 ## 4. 資訊架構詳細說明
 
 ### 🗺️ 地圖 / ⭐ 收藏
-使用者「自己的」店家收藏,不分群組,支援新增與編輯(不是只能新增後就改不了)。收藏篩選分兩排:「食物類型」(chip,常用攤開、其餘收合)與「標籤」(下拉選單,不是 chip 橫排——標籤數量可能較多,用下拉避免版面撐爆,外加一顆獨立的「★ 只看最愛」切換 chip)。每間餐廳的詳細內容包含:名稱、類型、價位、菜單存放區(常點餐點+價格,可多筆增刪)、菜單照片(可多張上傳)、自訂標籤(可複選既有標籤)、備註。
+使用者「自己的」店家收藏,不分群組,支援新增與編輯(不是只能新增後就改不了)。收藏篩選分兩排:「食物類型」(chip,常用攤開、其餘收合,使用者自訂類型併入收合區塊)與「標籤」(下拉選單,不是 chip 橫排——標籤數量可能較多,用下拉避免版面撐爆,外加一顆獨立的「★ 只看最愛」切換 chip)。每間餐廳的詳細內容包含:名稱、類型(8 種預設 + 使用者自訂類型,新增/編輯表單裡直接可以新增自訂類型)、價位、菜單存放區(常點餐點+價格,可多筆增刪)、菜單照片(可多張上傳)、自訂標籤(可複選既有標籤)、備註。
 
 ### 👥 群組
 第一層是群組列表,點進去是第二層的標籤清單(群組 = 一組自訂標籤的集合)。可新增標籤(名字/代表色)、可從既有標籤庫裡加入標籤到這個群組、可移出此群組或完全刪除標籤(完全刪除會連動清除這個標籤在所有餐廳上的引用)。
@@ -94,7 +94,10 @@ App 層級資訊:隱私權政策、服務條款、帳號設定、關於、意見
 ### 實體關聯(概念層級)
 ```
 users(帳號)
-  └─ 擁有 tags(自訂標籤)、groups(群組)、restaurants(收藏)、decision_history(歷史)、decision_sessions(場次)
+  └─ 擁有 tags(自訂標籤)、groups(群組)、restaurants(收藏)、decision_history(歷史)、decision_sessions(場次)、custom_categories(自訂食物類型)
+
+custom_categories(帳號自己新增的食物類型,跟前端寫死的 8 種預設類型並存)
+  └─ 不對 restaurants.category 設外鍵,靠文字比對關聯,改名/刪除時應用層批次更新
 
 tags(帳號自己的自訂標籤,純備忘性質,無身份意義)
   └─ 可以屬於多個 groups,可以掛在多個 restaurants 上
@@ -180,6 +183,15 @@ create table restaurant_photos (
   created_at timestamptz default now()
 );
 
+-- 使用者自訂的食物類型,跟前端寫死的 8 種預設類型並存;預設類型不進資料庫
+create table custom_categories (
+  id uuid primary key default gen_random_uuid(),
+  owner_user_id uuid references auth.users(id) on delete cascade not null,
+  name text not null,
+  created_at timestamptz default now(),
+  unique (owner_user_id, name)
+);
+
 create table decision_history (
   id uuid primary key default gen_random_uuid(),
   owner_user_id uuid references auth.users(id) on delete cascade not null,
@@ -233,7 +245,7 @@ create table session_votes (
 );
 ```
 
-啟用 Row Level Security,`owner_user_id = auth.uid()` 是基本擁有者規則;`restaurant_menu_items`/`restaurant_photos` 沒有自己的 `owner_user_id`,透過 `restaurant_id` 關聯回 `restaurants` 判斷擁有者。菜單照片建議直接用 Supabase Storage 存檔案本體,`storage_path` 只存路徑。`decision_sessions`/`session_participants`/`session_pool`/`session_votes` 這幾張表因為訪客沒有帳號,需要另外設計「憑 `invite_token` 換取有限寫入權限」的規則(建議透過一個 Edge Function 驗證 token 沒過期,再用 service role 代為寫入,不要讓訪客直接拿到能繞過 RLS 的權限)。
+啟用 Row Level Security,`owner_user_id = auth.uid()` 是基本擁有者規則;`restaurant_menu_items`/`restaurant_photos` 沒有自己的 `owner_user_id`,透過 `restaurant_id` 關聯回 `restaurants` 判斷擁有者。菜單照片建議直接用 Supabase Storage 存檔案本體,`storage_path` 只存路徑。`restaurants.category` 維持純文字欄位、不對 `custom_categories` 設外鍵(預設類型本來就不在資料庫裡,兩種類型都用文字比對),改名/刪除自訂類型時由應用層邏輯批次更新符合的 `restaurants.category` 文字值(改名→新名稱;刪除→「未分類」),做法比照 `decision_history.restaurant_name` 的文字備份模式。`decision_sessions`/`session_participants`/`session_pool`/`session_votes` 這幾張表因為訪客沒有帳號,需要另外設計「憑 `invite_token` 換取有限寫入權限」的規則(建議透過一個 Edge Function 驗證 token 沒過期,再用 service role 代為寫入,不要讓訪客直接拿到能繞過 RLS 的權限)。
 
 ---
 
@@ -334,6 +346,7 @@ create table session_votes (
 - `meal-picker.html` — 目前唯一可執行的原型,UI/互動邏輯的參考起點,已套用 UI/UX 優化定案
 - `CLAUDE_CODE_專案交接文件.md`(本文件)— 資料庫、帳號、排程、路線圖、第 8 節生命週期審查,以及第 11 節 UI/UX 優化指引(已執行完畢)
 - `補充-UIUX優化定案.md` — UI/UX 檢視問題清單與定案結果,已全部做進原型
+- `補充-食物類型擴充定案.md` — 食物類型可自訂擴充的定案結果
 
 ---
 

@@ -212,6 +212,10 @@
   .priceBtn.active { background: #C99A3D; border-color: #C99A3D; color: #201804; font-weight: 700; }
   .submitBtn { width: 100%; background: #232019; color: #F3ECDD; border: none; padding: 13px; border-radius: 8px; font-weight: 700; font-size: 15px; cursor: pointer; margin-top: 2px; }
   .submitBtn:disabled { opacity: 0.4; }
+  .customCatWrap { display: inline-flex; align-items: center; gap: 1px; }
+  .customCatWrap .catChip { border-radius: 999px 0 0 999px; }
+  .customCatEditBtn, .customCatDelBtn { border: 1px solid #C9BFA5; border-left: none; background: #FFFDF7; padding: 7px 8px; font-size: 12px; cursor: pointer; color: #7A7263; }
+  .customCatDelBtn { border-radius: 0 999px 999px 0; color: #B23A2E; }
   .colorPick { display: flex; gap: 8px; }
   .colorDot { width: 28px; height: 28px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; }
   .colorDot.active { border-color: #232019; }
@@ -239,6 +243,7 @@
   var TKEY = "meal-picker:tags:v1";
   var GKEY = "meal-picker:groups:v4";
   var HKEY = "meal-picker:history:v2";
+  var CKEY = "meal-picker:customCategories:v1";
 
   var CATEGORIES = ["中式","日式","韓式","西式","東南亞","小吃","早餐","飲料甜點"];
   var COMMON_CATEGORIES = ["中式","日式","韓式","西式","小吃"];
@@ -261,7 +266,7 @@
   ];
 
   var state = {
-    restaurants: null, tags: null, groups: null, history: null,
+    restaurants: null, tags: null, groups: null, history: null, customCategories: null,
     tab: "地圖",
 
     openPinId: null,
@@ -321,20 +326,23 @@
       state.tags = SEED_TAGS.slice();
       state.groups = SEED_GROUPS.slice();
       state.history = [];
+      state.customCategories = [];
       render();
       return;
     }
     (async function () {
-      var rRes = null, pRes = null, gRes = null, hRes = null;
+      var rRes = null, pRes = null, gRes = null, hRes = null, cRes = null;
       try { rRes = await window.storage.get(RKEY, false); } catch (e) { rRes = null; }
       try { pRes = await window.storage.get(TKEY, false); } catch (e) { pRes = null; }
       try { gRes = await window.storage.get(GKEY, false); } catch (e) { gRes = null; }
       try { hRes = await window.storage.get(HKEY, false); } catch (e) { hRes = null; }
+      try { cRes = await window.storage.get(CKEY, false); } catch (e) { cRes = null; }
 
       state.restaurants = (rRes && rRes.value) ? JSON.parse(rRes.value) : SEED_RESTAURANTS.slice();
       state.tags = (pRes && pRes.value) ? JSON.parse(pRes.value) : SEED_TAGS.slice();
       state.groups = (gRes && gRes.value) ? JSON.parse(gRes.value) : SEED_GROUPS.slice();
       state.history = (hRes && hRes.value) ? JSON.parse(hRes.value) : [];
+      state.customCategories = (cRes && cRes.value) ? JSON.parse(cRes.value) : [];
 
       if (!rRes || !rRes.value) { try { await window.storage.set(RKEY, JSON.stringify(state.restaurants), false); } catch (e) {} }
       if (!pRes || !pRes.value) { try { await window.storage.set(TKEY, JSON.stringify(state.tags), false); } catch (e) {} }
@@ -346,6 +354,7 @@
       state.tags = SEED_TAGS.slice();
       state.groups = SEED_GROUPS.slice();
       state.history = [];
+      state.customCategories = [];
       render();
     });
   }
@@ -361,6 +370,7 @@
   function persistTags() { render(); if (hasStorage) (async function () { var ok = await safeStorageSet(TKEY, JSON.stringify(state.tags)); if (!ok) showToast("儲存失敗,請檢查網路後再試一次"); })(); }
   function persistGroups() { render(); if (hasStorage) (async function () { var ok = await safeStorageSet(GKEY, JSON.stringify(state.groups)); if (!ok) showToast("儲存失敗,請檢查網路後再試一次"); })(); }
   function persistHistory() { if (hasStorage) (async function () { await safeStorageSet(HKEY, JSON.stringify(state.history)); })(); }
+  function persistCustomCategories() { render(); if (hasStorage) (async function () { var ok = await safeStorageSet(CKEY, JSON.stringify(state.customCategories)); if (!ok) showToast("儲存失敗,請檢查網路後再試一次"); })(); }
 
   // ---------- restaurant ops ----------
   function toggleFavorite(id) {
@@ -409,6 +419,46 @@
       state.restaurants = [item].concat(state.restaurants);
     }
     state.showModal = false; state.pendingLoc = null;
+    persistRestaurants();
+  }
+
+  // ---------- custom category ops ----------
+  function allCategoryNames() { return CATEGORIES.concat(state.customCategories.map(function (c) { return c.name; })); }
+  function addCustomCategory() {
+    var name = window.prompt ? window.prompt("新增自訂類型名稱:") : null;
+    if (!name) return;
+    name = name.trim();
+    if (!name) return;
+    if (allCategoryNames().indexOf(name) !== -1) { showToast("這個類型已經存在了"); return; }
+    var cc = { id: uid(), name: name };
+    state.customCategories = state.customCategories.concat([cc]);
+    state.form.category = name;
+    persistCustomCategories();
+  }
+  function renameCustomCategory(id) {
+    var cc = state.customCategories.filter(function (c) { return c.id === id; })[0];
+    if (!cc) return;
+    var name = window.prompt ? window.prompt("重新命名類型:", cc.name) : null;
+    if (!name) return;
+    name = name.trim();
+    if (!name || name === cc.name) return;
+    var taken = CATEGORIES.indexOf(name) !== -1 || state.customCategories.some(function (c) { return c.id !== id && c.name === name; });
+    if (taken) { showToast("這個類型已經存在了"); return; }
+    var oldName = cc.name;
+    state.customCategories = state.customCategories.map(function (c) { return c.id === id ? Object.assign({}, c, { name: name }) : c; });
+    state.restaurants = state.restaurants.map(function (r) { return r.category === oldName ? Object.assign({}, r, { category: name }) : r; });
+    if (state.form.category === oldName) state.form.category = name;
+    persistCustomCategories();
+    persistRestaurants();
+  }
+  function deleteCustomCategory(id) {
+    var cc = state.customCategories.filter(function (c) { return c.id === id; })[0];
+    if (!cc) return;
+    if (!(window.confirm ? window.confirm("確定要刪除「" + cc.name + "」這個類型嗎?使用這個類型的餐廳會自動變成「未分類」。") : true)) return;
+    state.customCategories = state.customCategories.filter(function (c) { return c.id !== id; });
+    state.restaurants = state.restaurants.map(function (r) { return r.category === cc.name ? Object.assign({}, r, { category: "未分類" }) : r; });
+    if (state.form.category === cc.name) state.form.category = CATEGORIES[0];
+    persistCustomCategories();
     persistRestaurants();
   }
 
@@ -843,7 +893,7 @@
   function render() {
     var app = document.getElementById("app");
     app.innerHTML = "";
-    if (state.restaurants === null || state.tags === null || state.groups === null) {
+    if (state.restaurants === null || state.tags === null || state.groups === null || state.customCategories === null) {
       app.appendChild(el("div", { style: "min-height:100vh;display:flex;align-items:center;justify-content:center;color:#F3ECDD;" }, "載入中…"));
       return;
     }
@@ -978,7 +1028,8 @@
     frag.appendChild(el("div", { class: "filterGroupLabel mono" }, "食物類型"));
     var catList = Array.from(new Set(state.restaurants.map(function (r) { return r.category; })));
     var presentCommon = COMMON_CATEGORIES.filter(function (c) { return catList.indexOf(c) !== -1; });
-    var presentMore = MORE_CATEGORIES.filter(function (c) { return catList.indexOf(c) !== -1; });
+    var moreCategoriesWithCustom = MORE_CATEGORIES.concat(state.customCategories.map(function (c) { return c.name; }));
+    var presentMore = moreCategoriesWithCustom.filter(function (c) { return catList.indexOf(c) !== -1; });
     var f1 = el("div", { class: "filters" });
     ["全部"].concat(presentCommon).forEach(function (name) {
       var b = el("button", { class: "chip" + (state.colCatFilter === name ? " active" : "") }, escapeHtml(name));
@@ -1271,7 +1322,7 @@
       return b;
     }
     COMMON_CATEGORIES.forEach(function (c) { f.appendChild(makeCatChip(c)); });
-    if (state.suggestCatExpanded) MORE_CATEGORIES.forEach(function (c) { f.appendChild(makeCatChip(c)); });
+    if (state.suggestCatExpanded) MORE_CATEGORIES.concat(state.customCategories.map(function (c) { return c.name; })).forEach(function (c) { f.appendChild(makeCatChip(c)); });
     if (MORE_CATEGORIES.length > 0) {
       var moreToggle = el("button", { class: "ghostBtn" }, state.suggestCatExpanded ? "收合 ▲" : "更多類型 ▾");
       moreToggle.onclick = function () { state.suggestCatExpanded = !state.suggestCatExpanded; render(); };
@@ -1672,6 +1723,22 @@
         cb.onclick = function () { state.form.category = c; render(); };
         catRow.appendChild(cb);
       });
+      state.customCategories.forEach(function (cc) {
+        var ccWrap = el("span", { class: "customCatWrap" });
+        var cb = el("button", { class: "catChip" + (state.form.category === cc.name ? " active" : "") }, escapeHtml(cc.name));
+        cb.onclick = function () { state.form.category = cc.name; render(); };
+        ccWrap.appendChild(cb);
+        var editB = el("button", { class: "customCatEditBtn" }, "✎");
+        editB.onclick = function (e) { e.stopPropagation(); renameCustomCategory(cc.id); };
+        ccWrap.appendChild(editB);
+        var delB = el("button", { class: "customCatDelBtn" }, "✕");
+        delB.onclick = function (e) { e.stopPropagation(); deleteCustomCategory(cc.id); };
+        ccWrap.appendChild(delB);
+        catRow.appendChild(ccWrap);
+      });
+      var addCatBtn = el("button", { class: "catChip", style: "border-style:dashed;" }, "＋ 新增自訂類型");
+      addCatBtn.onclick = addCustomCategory;
+      catRow.appendChild(addCatBtn);
       f2.appendChild(catRow);
       modal.appendChild(f2);
 
