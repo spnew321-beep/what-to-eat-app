@@ -272,7 +272,6 @@
     openPinId: null,
 
     colCatFilter: "全部",
-    colCatExpanded: false,
     colTagFilter: "全部",
     colFavOnly: false,
 
@@ -1027,27 +1026,21 @@
 
     frag.appendChild(el("div", { class: "filterGroupLabel mono" }, "食物類型"));
     var catList = Array.from(new Set(state.restaurants.map(function (r) { return r.category; })));
-    var presentCommon = COMMON_CATEGORIES.filter(function (c) { return catList.indexOf(c) !== -1; });
-    var moreCategoriesWithCustom = MORE_CATEGORIES.concat(state.customCategories.map(function (c) { return c.name; }));
-    var presentMore = moreCategoriesWithCustom.filter(function (c) { return catList.indexOf(c) !== -1; });
-    var f1 = el("div", { class: "filters" });
-    ["全部"].concat(presentCommon).forEach(function (name) {
-      var b = el("button", { class: "chip" + (state.colCatFilter === name ? " active" : "") }, escapeHtml(name));
-      b.onclick = function () { state.colCatFilter = name; render(); };
-      f1.appendChild(b);
+    var orderedCategories = CATEGORIES.concat(state.customCategories.map(function (c) { return c.name; }));
+    var extraCategories = catList.filter(function (c) { return orderedCategories.indexOf(c) === -1; });
+    var presentCategories = orderedCategories.concat(extraCategories).filter(function (c) { return catList.indexOf(c) !== -1; });
+    var f1 = el("div", { class: "filters", style: "align-items:center" });
+    var catSelect = el("select", {});
+    catSelect.style.cssText = "border:1px solid #3A3F4C;background:#20232B;color:#F3ECDD;border-radius:999px;padding:7px 13px;font-size:13px;";
+    var allCatOpt = el("option", { value: "全部" }, "全部類型");
+    catSelect.appendChild(allCatOpt);
+    presentCategories.forEach(function (c) {
+      var opt = el("option", { value: c }, escapeHtml(c));
+      if (state.colCatFilter === c) opt.setAttribute("selected", "selected");
+      catSelect.appendChild(opt);
     });
-    if (state.colCatExpanded) {
-      presentMore.forEach(function (name) {
-        var b = el("button", { class: "chip" + (state.colCatFilter === name ? " active" : "") }, escapeHtml(name));
-        b.onclick = function () { state.colCatFilter = name; render(); };
-        f1.appendChild(b);
-      });
-    }
-    if (presentMore.length > 0) {
-      var moreToggle = el("button", { class: "ghostBtn" }, state.colCatExpanded ? "收合 ▲" : "更多類型 ▾");
-      moreToggle.onclick = function () { state.colCatExpanded = !state.colCatExpanded; render(); };
-      f1.appendChild(moreToggle);
-    }
+    catSelect.onchange = function (e) { state.colCatFilter = e.target.value; render(); };
+    f1.appendChild(catSelect);
     frag.appendChild(f1);
 
     frag.appendChild(el("div", { class: "filterGroupLabel mono" }, "標籤"));
@@ -1113,6 +1106,32 @@
   function renderGroupsTab() {
     if (state.groupsSelectedId) return renderGroupDetail(state.groupsSelectedId);
     var frag = document.createDocumentFragment();
+
+    var tagHead = el("div", { class: "pickerHead", style: "max-width:560px;width:100%" });
+    tagHead.appendChild(el("div", { class: "phTitle mono" }, "所有標籤"));
+    var addTagBtn = el("button", { class: "ghostBtn" }, "＋ 新增標籤");
+    addTagBtn.onclick = function () { openAddTagModal(null, null); };
+    tagHead.appendChild(addTagBtn);
+    frag.appendChild(tagHead);
+
+    var tagListWrap = el("div", { class: "card" });
+    if (state.tags.length === 0) tagListWrap.appendChild(el("div", { class: "emptyList" }, "還沒有標籤,點上面「＋新增標籤」新增第一個"));
+    state.tags.forEach(function (p) {
+      var row = el("div", { class: "row" });
+      var main = el("div", { class: "rowMain" }, "<span class='dot' style='background:" + p.color + "'>" + initials(p.name) + "</span> " + escapeHtml(p.name));
+      row.appendChild(main);
+      var editBtn = el("button", { class: "iconBtn" }, "✎");
+      editBtn.onclick = function () { openAddTagModal(null, p); };
+      row.appendChild(editBtn);
+      var delBtn = el("button", { class: "iconBtn" }, "🗑");
+      delBtn.onclick = function () { deleteTagGlobally(p.id); };
+      row.appendChild(delBtn);
+      tagListWrap.appendChild(row);
+    });
+    frag.appendChild(tagListWrap);
+
+    var groupHead = el("div", { class: "sectionLabel mono", style: "margin-top:16px" }, "群組");
+    frag.appendChild(groupHead);
     var lw = el("div", { class: "card" });
     if (state.groups.length === 0) lw.appendChild(el("div", { class: "emptyList" }, "還沒有群組,點右上角「＋」新增"));
     state.groups.forEach(function (g) {
@@ -1130,10 +1149,6 @@
     var g = groupById(groupId);
     var frag = document.createDocumentFragment();
     if (!g) { frag.appendChild(el("div", { class: "emptyList" }, "找不到這個群組")); return frag; }
-
-    var delBtn = el("button", { class: "ghostBtn", style: "margin-bottom:14px;color:#B23A2E;border-color:#B23A2E" }, "🗑 刪除這個群組");
-    delBtn.onclick = function () { deleteGroup(groupId); };
-    frag.appendChild(delBtn);
 
     var lw = el("div", { class: "card" });
     var members = g.tagIds.map(tagById).filter(Boolean);
@@ -1180,6 +1195,11 @@
         frag.appendChild(listWrap);
       }
     }
+
+    var delGroupBtn = el("button", { class: "ghostBtn", style: "display:block;margin:20px auto 0;color:#B23A2E;border-color:#B23A2E" }, "🗑 刪除這個群組");
+    delGroupBtn.onclick = function () { deleteGroup(groupId); };
+    frag.appendChild(delGroupBtn);
+
     return frag;
   }
 
@@ -1861,7 +1881,7 @@
       pf2.appendChild(colorRow);
       modal.appendChild(pf2);
 
-      var psubmitRef = el("button", { class: "submitBtn" }, state.tagForm.id ? "儲存變更" : "加入群組");
+      var psubmitRef = el("button", { class: "submitBtn" }, state.tagForm.id ? "儲存變更" : (state.tagForm.groupContextId ? "加入群組" : "新增標籤"));
       psubmitRef.disabled = !state.tagForm.name.trim();
       psubmitRef.onclick = submitTagForm;
       modal.appendChild(psubmitRef);
