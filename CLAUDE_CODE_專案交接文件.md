@@ -105,7 +105,8 @@ groups(群組 = 標籤的集合)
 
 restaurants(餐廳,屬於某個 user)
   ├─ restaurant_tags:restaurant_id × tag_id
-  └─ restaurant_menu_items:餐廳的常點餐點清單(一對多)
+  ├─ restaurant_menu_items:餐廳的常點餐點清單(一對多,文字+價格)
+  └─ restaurant_photos:餐廳的菜單照片(一對多,跟上面文字清單疊加,不是取代)
 
 decision_history(決策歷史,屬於某個 user,不分群組)
 
@@ -172,6 +173,14 @@ create table restaurant_menu_items (
   created_at timestamptz default now()
 );
 
+-- 菜單照片:跟上面的文字清單是疊加關係,不是取代,一間餐廳可上傳多張
+create table restaurant_photos (
+  id uuid primary key default gen_random_uuid(),
+  restaurant_id uuid references restaurants(id) on delete cascade not null,
+  storage_path text not null,  -- Supabase Storage 路徑,不要把照片路徑塞進 restaurants 表
+  created_at timestamptz default now()
+);
+
 create table decision_history (
   id uuid primary key default gen_random_uuid(),
   owner_user_id uuid references auth.users(id) on delete cascade not null,
@@ -225,7 +234,7 @@ create table session_votes (
 );
 ```
 
-啟用 Row Level Security,`owner_user_id = auth.uid()` 是基本擁有者規則。`decision_sessions`/`session_participants`/`session_pool`/`session_votes` 這幾張表因為訪客沒有帳號,需要另外設計「憑 `invite_token` 換取有限寫入權限」的規則(建議透過一個 Edge Function 驗證 token 沒過期,再用 service role 代為寫入,不要讓訪客直接拿到能繞過 RLS 的權限)。
+啟用 Row Level Security,`owner_user_id = auth.uid()` 是基本擁有者規則;`restaurant_menu_items`/`restaurant_photos` 沒有自己的 `owner_user_id`,透過 `restaurant_id` 關聯回 `restaurants` 判斷擁有者。菜單照片建議直接用 Supabase Storage 存檔案本體,`storage_path` 只存路徑。`decision_sessions`/`session_participants`/`session_pool`/`session_votes` 這幾張表因為訪客沒有帳號,需要另外設計「憑 `invite_token` 換取有限寫入權限」的規則(建議透過一個 Edge Function 驗證 token 沒過期,再用 service role 代為寫入,不要讓訪客直接拿到能繞過 RLS 的權限)。
 
 ---
 
