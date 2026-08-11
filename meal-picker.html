@@ -272,6 +272,7 @@
     colFavOnly: false,
 
     groupsSelectedId: null,
+    groupAddExistOpen: false,
 
     decMode: "抽籤",
     pool: [], drawn: null, browseOpen: false, catState: {}, suggestCatExpanded: false, suggestion: null, spinning: false,
@@ -312,7 +313,6 @@
   function groupById(id) { return (state.groups || []).filter(function (g) { return g.id === id; })[0]; }
   function initials(name) { return name ? name.slice(0, 1) : "?"; }
   function showToast(msg) { state.toastMsg = msg; render(); setTimeout(function () { state.toastMsg = ""; render(); }, 2200); }
-  function notReady() { showToast("此功能尚未開放,之後接上資料庫才會實裝"); }
 
   // ---------- load / persist ----------
   function load() {
@@ -368,6 +368,7 @@
     persistRestaurants();
   }
   function removeRestaurant(id) {
+    if (!(window.confirm ? window.confirm("確定要刪除這間餐廳嗎?菜單、照片、標籤記錄都會一併刪除。") : true)) return;
     state.restaurants = state.restaurants.filter(function (r) { return r.id !== id; });
     state.pool = state.pool.filter(function (pid) { return pid !== id; });
     state.collab.pool = state.collab.pool.filter(function (pid) { return pid !== id; });
@@ -935,6 +936,11 @@
       if (state.openPinId === r.id) {
         var pop = el("div", { class: "pinPopover" });
         pop.style.left = r.x + "%"; pop.style.top = r.y + "%";
+        var vFlip = r.y < 22;
+        var hEdge = r.x < 14 ? "left" : (r.x > 86 ? "right" : "center");
+        var popTx = hEdge === "left" ? "-4%" : (hEdge === "right" ? "-96%" : "-50%");
+        pop.style.transform = "translate(" + popTx + ", " + (vFlip ? "14px" : "-100%") + ")";
+        pop.style.marginTop = vFlip ? "0" : "-26px";
         var closeX = el("button", { class: "closeX" }, "✕");
         closeX.onclick = function (e) { e.stopPropagation(); state.openPinId = null; render(); };
         pop.appendChild(closeX);
@@ -1107,19 +1113,21 @@
 
     var others = state.tags.filter(function (p) { return g.tagIds.indexOf(p.id) === -1; });
     if (others.length > 0) {
-      var addExistBtn = el("button", { class: "browseToggle" }, "從其他標籤中加入既有標籤 ▾");
-      var listWrap = el("div", { class: "browseList", style: "display:none" });
-      others.forEach(function (p) {
-        var row = el("div", { class: "browseRow" });
-        row.appendChild(el("span", {}, escapeHtml(p.name)));
-        var addBtn = el("button", { class: "ghostBtn", style: "margin-left:auto" }, "加入");
-        addBtn.onclick = function () { addExistingTagToGroup(groupId, p.id); };
-        row.appendChild(addBtn);
-        listWrap.appendChild(row);
-      });
-      addExistBtn.onclick = function () { listWrap.style.display = listWrap.style.display === "none" ? "block" : "none"; };
+      var addExistBtn = el("button", { class: "browseToggle" }, state.groupAddExistOpen ? "從其他標籤中加入既有標籤 ▲" : "從其他標籤中加入既有標籤 ▾");
+      addExistBtn.onclick = function () { state.groupAddExistOpen = !state.groupAddExistOpen; render(); };
       frag.appendChild(addExistBtn);
-      frag.appendChild(listWrap);
+      if (state.groupAddExistOpen) {
+        var listWrap = el("div", { class: "browseList" });
+        others.forEach(function (p) {
+          var row = el("div", { class: "browseRow" });
+          row.appendChild(el("span", {}, escapeHtml(p.name)));
+          var addBtn = el("button", { class: "ghostBtn", style: "margin-left:auto" }, "加入");
+          addBtn.onclick = function () { addExistingTagToGroup(groupId, p.id); };
+          row.appendChild(addBtn);
+          listWrap.appendChild(row);
+        });
+        frag.appendChild(listWrap);
+      }
     }
     return frag;
   }
@@ -1372,8 +1380,8 @@
     frag.appendChild(el("div", { class: "sectionLabel mono", style: "margin-top:16px" }, "設定截止時間(未來 7 天內)"));
     var presetRow = el("div", { class: "filters" });
     [["1h", "1 小時後"], ["tonight", "今晚 8 點"], ["tomorrownoon", "明天中午"], ["weekend", "本週末"]].forEach(function (pair) {
-      var b = el("button", { class: "chip" }, pair[1]);
-      b.onclick = function () { state.collab.deadlineAt = collabPresetDeadline(pair[0]); render(); };
+      var b = el("button", { class: "chip" + (state.collab.deadlinePreset === pair[0] ? " active" : "") }, pair[1]);
+      b.onclick = function () { state.collab.deadlineAt = collabPresetDeadline(pair[0]); state.collab.deadlinePreset = pair[0]; render(); };
       presetRow.appendChild(b);
     });
     frag.appendChild(presetRow);
@@ -1385,11 +1393,11 @@
     dtInput.value = toDatetimeLocalValue(state.collab.deadlineAt || collabDefaultDeadline());
     dtInput.min = toDatetimeLocalValue(Date.now() + 60000);
     dtInput.max = toDatetimeLocalValue(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    dtInput.onchange = function (e) { var t = new Date(e.target.value).getTime(); if (!isNaN(t)) { state.collab.deadlineAt = t; render(); } };
+    dtInput.onchange = function (e) { var t = new Date(e.target.value).getTime(); if (!isNaN(t)) { state.collab.deadlineAt = t; state.collab.deadlinePreset = null; render(); } };
     dtWrap.appendChild(dtInput);
     frag.appendChild(dtWrap);
 
-    frag.appendChild(el("div", { class: "excludeNote", style: "margin-top:6px" }, "目前設定:" + formatDeadlineDisplay(state.collab.deadlineAt) + "。時間一到,系統會依候選店家狀況自動結算(原型用「立即結算」按鈕模擬)。"));
+    frag.appendChild(el("div", { class: "excludeNote", style: "margin-top:6px" }, "目前設定:" + formatDeadlineDisplay(state.collab.deadlineAt) + "。時間一到,系統會依候選店家狀況自動結算。"));
 
     var startBtn = el("button", { class: "primaryBtn", style: "margin-top:16px" }, "建立協作場次");
     startBtn.onclick = collabEnterInvite;
@@ -1408,7 +1416,7 @@
     box.appendChild(el("div", { class: "rowMeta mono" }, "https://meal-app.example/join/•••••• <span class='comingSoon'>尚未開放</span>"));
     box.appendChild(el("div", { class: "rowMeta" }, "連結有效期跟著這次場次的截止時間走,目前是 " + formatDeadlineDisplay(state.collab.deadlineAt) + ",共同編輯模式下可自由轉傳"));
     var copyBtn = el("button", { class: "ghostBtn" }, "複製連結");
-    copyBtn.disabled = true; copyBtn.style.opacity = "0.4";
+    copyBtn.onclick = function () { showToast("連結功能需要接上帳號系統跟資料庫才能產生真的可分享連結"); };
     box.appendChild(copyBtn);
     card.appendChild(box);
     frag.appendChild(card);
@@ -1601,17 +1609,17 @@
   function renderMoreTab() {
     var frag = document.createDocumentFragment();
     var items = [
-      { key: "privacy", label: "🔒 隱私權政策", ready: false },
-      { key: "terms", label: "📄 服務條款", ready: false },
-      { key: "account", label: "👤 帳號設定", ready: false },
+      { key: "privacy", label: "🔒 隱私權政策", ready: false, notReadyMsg: "隱私權政策需要接上正式帳號系統後,依實際蒐集的資料範圍撰寫內容才能上線" },
+      { key: "terms", label: "📄 服務條款", ready: false, notReadyMsg: "服務條款需要等正式營運模式(帳號、協作場次規則)確定後才能撰寫" },
+      { key: "account", label: "👤 帳號設定", ready: false, notReadyMsg: "帳號設定需要先接上 Supabase Auth 真帳號系統才能使用" },
       { key: "about", label: "ℹ️ 關於這個 App", ready: true },
-      { key: "feedback", label: "💬 意見回饋", ready: false }
+      { key: "feedback", label: "💬 意見回饋", ready: false, notReadyMsg: "意見回饋需要接上後端才能收集,目前請直接跟開發者反應" }
     ];
     var group = el("div", { class: "moreGroup" });
     items.forEach(function (it) {
       var row = el("div", { class: "moreRow" }, "<span class='mrLabel'>" + it.label + (it.ready ? "" : " <span class='comingSoon'>尚未開放</span>") + "</span><span class='mrArrow'>›</span>");
       row.onclick = function () {
-        if (!it.ready) { notReady(); return; }
+        if (!it.ready) { showToast(it.notReadyMsg); return; }
         state.morePanelOpen = state.morePanelOpen === it.key ? null : it.key;
         render();
       };
