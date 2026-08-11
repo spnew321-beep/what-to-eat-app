@@ -1,8 +1,8 @@
-# 這餐吃什麼 — Claude Code 專案交接文件 v2
+# 這餐吃什麼 — Claude Code 專案交接文件 v3
 
-> 這份文件取代先前版本。除了原本的架構說明,這次新增一份完整的「資料生命週期審查」——把原型階段沒有暴露、但接上真資料庫後會直接卡死或報錯的邏輯漏洞都找出來、逐一定案。**這份文件本身已經是討論完的定案結果,不是待確認的草案**,Claude Code 可以直接照著做,不需要再回頭跟使用者確認這些規則。
+> 這份文件取代先前版本。除了原本的架構說明,v2 新增了完整的「資料生命週期審查」(見第 8 節)。**v3 在此基礎上做了一次更大的簡化:把「成員標籤(people)」整個概念拿掉,併入「自訂標籤(tags)」,系統裡不再有『人』這個實體**,詳見第 2、5 節。這份文件本身已經是討論完的定案結果,不是待確認的草案,Claude Code 可以直接照著做,不需要再回頭跟使用者確認這些規則。
 >
-> 搭配同一批交付檔案裡的 `meal-picker.html`——那是目前唯一能跑的原型,UI 邏輯、互動細節都在裡面,建議直接讀那個檔案作為介面與互動邏輯的參考起點,這份文件負責補完它沒有、也不可能有的部分(資料庫、帳號、排程、多人同步)。
+> 搭配同一批交付檔案裡的 `meal-picker.html`——那是目前唯一能跑的原型,UI 邏輯、互動細節都在裡面,建議直接讀那個檔案作為介面與互動邏輯的參考起點。**注意:原型裡的「成員/people」相關 UI(群組裡的成員名單、飲食偏好欄位)是舊設計,不要照搬,以本文件 v3 的標籤模型為準**,這份文件負責補完原型沒有、也不可能有的部分(資料庫、帳號、排程、多人同步)。
 
 ---
 
@@ -32,10 +32,10 @@
 ### 情境 B:協作模式(多人各自在自己裝置上操作)
 發起人建立協作場次,設定截止時間(未來 7 天內任選,預設 1 小時後)與決策模式,分享邀請連結。受邀者用**訪客身份**(當場輸入名字)或**登入自己的帳號**加入,在截止時間前各自新增候選店家、對候選表態、按「完成」。截止時間一到,系統依候選狀況自動結算,結果同步給所有人。
 
-### 關鍵簡化(這次審查的核心決定):「人」永遠只是標籤,不是身份
-系統裡的「人」(例如「哥哥」)**只是某個帳號自己貼在自己餐廳上的備忘標籤**,沒有「代管」跟「會員」兩種狀態,也不會被「認領」或「轉移」。如果哥哥想要自己用這個 App、自己管理自己的收藏,他就是**自己申請一個全新帳號**,跟媽媽帳號裡那個「哥哥」標籤從頭到尾是兩件不相干的事,系統不需要、也不會知道兩者是同一個人。
+### 關鍵簡化(v3 更新):系統裡沒有「人」這個實體,只有「標籤」
+v2 版本原本設計「人」(例如「哥哥」)是一種特殊的標籤,帶有姓名/顏色/飲食偏好,可以被拉進群組。v3 更進一步簡化:**「人」這個概念整個拿掉,不存在特殊待遇,系統裡只剩下一種東西——使用者自己建立的自訂標籤(tags)**。標籤沒有身份、沒有飲食偏好欄位,單純是「名稱 + 顏色」,使用者想用它標記「這是誰可能喜歡的店」(取名叫「哥哥」)還是標記店家屬性(取名叫「適合約會」「隱藏美食」),對系統來說完全一樣,沒有語意上的區分。
 
-這個決定同時消掉了原本設計裡好幾個複雜的邊界情況(見第 8 節問題 2、8),讓整個資料模型單純很多。
+這個決定延續並強化了 v2 就已經定案的方向(原本 v2 就規定人不會被「代管」「認領」或「轉移」,見第 8 節問題 2、8):既然標籤從來就不代表真實身份,乾脆連「這是人」的特殊分類都拿掉,資料模型單純很多,收藏分頁的篩選 UI 也只需要一組「標籤」篩選,不用再分「成員」跟「自訂」兩排。
 
 **協作場次裡真正會出現、會按✅、會表態的參與者,一律是透過邀請連結真的加入的人**(訪客或登入帳號),跟「標籤」是兩個完全獨立的概念,「選群組」只是拿來快速把某些標籤過的店家拉進候選名單的捷徑,不代表那些標籤本人會出現在場次裡。
 
@@ -56,19 +56,21 @@
 - Google 地圖真實店家搜尋(API 金鑰不能放前端,暫不內建)
 
 **這次審查後,原型裡以下邏輯需要在正式版調整,不是照搬:**
-- 拿掉「新增成員時選代管/會員」這個步驟,成員永遠是單純的標籤表單(名字/顏色/偏好)
+- 原型裡的「成員(people)」概念整個拿掉,併入「自訂標籤(tags)」——不再有「新增成員選代管/會員」這個步驟,也不再有「飲食偏好」欄位,新增標籤只是單純的「名字 + 顏色」表單
+- 「群組」的用途不變(快速把某組標籤拉進候選名單),但底下裝的是自訂標籤而不是成員,群組第二層畫面從「成員名單」變成「標籤清單」
 - 協作場次的「等待時間上限(10/30/60分鐘)」改成「絕對截止時間(選未來的日期時間)」
 - 決策模式(直接轉盤/先表態)一開始就要選定,但候選店家與表態動作在截止時間前隨時可做,不是分階段鎖定
+- 收藏餐廳新增/編輯表單擴充三個區塊:菜單存放區(常點餐點+價格,可多筆)、自訂標籤(可複選既有標籤或新建)、備註(沿用原本欄位)
 
 ---
 
 ## 4. 資訊架構詳細說明
 
 ### 🗺️ 地圖 / ⭐ 收藏
-使用者「自己的」店家收藏,不分群組。收藏篩選分兩排:「食物類型」(常用攤開、其餘收合)與「成員喜愛的店」(依標籤篩選)。
+使用者「自己的」店家收藏,不分群組。收藏篩選分兩排:「食物類型」(常用攤開、其餘收合)與「標籤」(依自訂標籤篩選)。每間餐廳的詳細內容包含:名稱、類型、價位、菜單存放區(常點餐點+價格,可多筆)、自訂標籤(可複選)、備註。
 
 ### 👥 群組
-第一層是群組列表,點進去是第二層的成員名單(其實是標籤名單)。可新增標籤(名字/代表色/飲食偏好)、可從其他已知的人裡加入既有標籤、可移出此群組或完全刪除標籤(完全刪除會連動清除這個標籤在所有餐廳上的引用)。
+第一層是群組列表,點進去是第二層的標籤清單(群組 = 一組自訂標籤的集合)。可新增標籤(名字/代表色)、可從既有標籤庫裡加入標籤到這個群組、可移出此群組或完全刪除標籤(完全刪除會連動清除這個標籤在所有餐廳上的引用)。
 
 ### 🎯 決策
 三個子模式:
@@ -81,27 +83,29 @@ App 層級資訊:隱私權政策、服務條款、帳號設定、關於、意見
 
 ---
 
-## 5. 資料模型(已套用第 8 節審查結果)
+## 5. 資料模型(已套用第 8 節審查結果 + v3 標籤整合)
 
 ### 核心原則
 - 餐廳收藏、地圖、決策歷史都是「帳號個人的」,不分群組
-- 「人」是帳號自己的標籤,**沒有身份狀態,不會被認領或轉移**
-- 群組只是「一群標籤的集合」,方便快速把某些標籤的店拉進候選名單
+- **系統裡沒有「人」這個實體**,只有使用者自己建立的自訂標籤(`tags`),標籤只有名稱和顏色,沒有身份、沒有飲食偏好欄位
+- 群組是「一組自訂標籤的集合」,方便快速把某些標籤的店拉進候選名單
 - 協作場次的參與者(真人)跟標籤是兩個獨立的世界,場次建立時參與者名單已是快照,不會因為群組異動而受影響
+- 每間餐廳除了基本資料,還有一份可多筆的菜單(常點餐點+價格)
 
 ### 實體關聯(概念層級)
 ```
 users(帳號)
-  └─ 擁有 people(標籤)、groups(群組)、restaurants(收藏)、decision_history(歷史)、decision_sessions(場次)
+  └─ 擁有 tags(自訂標籤)、groups(群組)、restaurants(收藏)、decision_history(歷史)、decision_sessions(場次)
 
-people(帳號自己的標籤,純備忘性質)
-  └─ 可以屬於多個 groups
+tags(帳號自己的自訂標籤,純備忘性質,無身份意義)
+  └─ 可以屬於多個 groups,可以掛在多個 restaurants 上
 
 groups(群組 = 標籤的集合)
-  └─ group_members:group_id × person_id
+  └─ group_members:group_id × tag_id
 
 restaurants(餐廳,屬於某個 user)
-  └─ restaurant_tags:restaurant_id × person_id
+  ├─ restaurant_tags:restaurant_id × tag_id
+  └─ restaurant_menu_items:餐廳的常點餐點清單(一對多)
 
 decision_history(決策歷史,屬於某個 user,不分群組)
 
@@ -109,7 +113,7 @@ decision_sessions(協作場次)
   ├─ 建立時快照參與者,不即時查詢群組
   ├─ deadline_at:絕對截止時間
   ├─ status:collecting | waiting | done | no_result
-  ├─ session_participants:真人(訪客或登入帳號),不是 people 標籤
+  ├─ session_participants:真人(訪客或登入帳號),不是 tags 標籤
   ├─ session_pool:候選店家,可以是某人收藏裡的店,也可以是場次專用臨時候選
   └─ session_votes:表態篩選模式專用
 ```
@@ -117,13 +121,12 @@ decision_sessions(協作場次)
 ### 正式的 Supabase (Postgres) SQL
 
 ```sql
--- 標籤(純備忘性質,沒有身份狀態)
-create table people (
+-- 自訂標籤(純備忘性質,沒有身份狀態,不代表任何人)
+create table tags (
   id uuid primary key default gen_random_uuid(),
   owner_user_id uuid references auth.users(id) on delete cascade not null,
   name text not null,
   color text not null,
-  prefs text[] default '{}',
   created_at timestamptz default now()
 );
 
@@ -136,8 +139,8 @@ create table groups (
 
 create table group_members (
   group_id uuid references groups(id) on delete cascade,
-  person_id uuid references people(id) on delete cascade,
-  primary key (group_id, person_id)
+  tag_id uuid references tags(id) on delete cascade,
+  primary key (group_id, tag_id)
 );
 
 create table restaurants (
@@ -155,8 +158,18 @@ create table restaurants (
 
 create table restaurant_tags (
   restaurant_id uuid references restaurants(id) on delete cascade,
-  person_id uuid references people(id) on delete cascade,
-  primary key (restaurant_id, person_id)
+  tag_id uuid references tags(id) on delete cascade,
+  primary key (restaurant_id, tag_id)
+);
+
+-- 菜單存放區:常點的餐點及價格,一間餐廳可有多筆
+create table restaurant_menu_items (
+  id uuid primary key default gen_random_uuid(),
+  restaurant_id uuid references restaurants(id) on delete cascade not null,
+  name text not null,
+  price numeric(10,2),
+  sort_order integer default 0,
+  created_at timestamptz default now()
 );
 
 create table decision_history (
@@ -181,7 +194,7 @@ create table decision_sessions (
   created_at timestamptz default now()
 );
 
--- 真人參與者,注意:不參照 people 表,標籤跟真人是兩個世界
+-- 真人參與者,注意:不參照 tags 表,標籤跟真人是兩個世界
 create table session_participants (
   id uuid primary key default gen_random_uuid(),
   session_id uuid references decision_sessions(id) on delete cascade,
@@ -241,7 +254,7 @@ create table session_votes (
    讓大家能看到結果、輸出分享圖片
 10. 緩衝時間過後,由排程任務整個刪除場次(參與者/候選/表態全部隨 CASCADE 一併清除)
 11. 【順手功能】結果畫面提供「把這次的參與者存成新群組」按鈕
-    —— 把 session_participants 的名字轉存成新的 people 標籤 + 新 group,方便下次直接選group重來一次
+    —— 把 session_participants 的名字轉存成新的 tags 標籤 + 新 group,方便下次直接選group重來一次
 ```
 
 ### 逾時觸發機制(A+B 雙保險,已定案)
@@ -286,7 +299,10 @@ create table session_votes (
 
 **這次審查過程中額外發現、順手一併定案的細節:**
 - 候選名單除了能從既有收藏挑店,協作場次裡任何參與者(包含訪客)都可以臨時新增一間「這場次專用」的候選店家,不掛在任何人收藏底下,場次結束就消失(對應 `session_pool` 表的 `adhoc_name`/`adhoc_category` 欄位)
-- `session_participants` 刻意不參照 `people` 表——標籤(備忘用途)跟真人參與者(真的會按✅、會表態)是兩個獨立的資料世界,不要混在一起,這是這次審查最重要的架構簡化
+- `session_participants` 刻意不參照 `tags` 表——標籤(備忘用途)跟真人參與者(真的會按✅、會表態)是兩個獨立的資料世界,不要混在一起,這是這次審查最重要的架構簡化
+
+**v3 追加簡化(在上述十題定案之後,再一次簡化):**
+- 原本第 8 節問題 2、8 的討論前提是「人」還是一種特殊標籤(帶飲食偏好、可能被認領)。v3 把這個特殊分類整個拿掉,`people` 表併入 `tags` 表,不再有 `prefs` 欄位,`group_members`/`restaurant_tags` 一律改參照 `tag_id`。原本問題 2、8 的定案結論(不設代管/認領機制、帳號各刪各的)依然成立,只是現在連「這是人」的分類都不存在了,規則更單純
 
 ---
 
