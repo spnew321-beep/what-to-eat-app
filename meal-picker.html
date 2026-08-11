@@ -278,9 +278,10 @@
 
     collab: {
       step: "chooseAudience", audienceType: null, audienceGroupId: null,
-      decisionMode: "random", deadlineAt: null,
+      decisionMode: "random", deadlineAt: null, deadlinePreset: null,
       participants: [], pool: [], votes: {}, winner: null, noResult: false, spinning: false,
-      adhocForm: { name: "", category: CATEGORIES[0] }, savedAsGroup: false, browseOpen: false
+      adhocForm: { name: "", category: CATEGORIES[0] }, savedAsGroup: false, browseOpen: false,
+      activeSubTab: "candidates"
     },
 
     showModal: false, modalType: "restaurant", pendingLoc: null,
@@ -689,9 +690,10 @@
     if (collabTimerHandle) { clearInterval(collabTimerHandle); collabTimerHandle = null; }
     state.collab = {
       step: "chooseAudience", audienceType: null, audienceGroupId: null,
-      decisionMode: "random", deadlineAt: null,
+      decisionMode: "random", deadlineAt: null, deadlinePreset: null,
       participants: [], pool: [], votes: {}, winner: null, noResult: false, spinning: false,
-      adhocForm: { name: "", category: CATEGORIES[0] }, savedAsGroup: false, browseOpen: false
+      adhocForm: { name: "", category: CATEGORIES[0] }, savedAsGroup: false, browseOpen: false,
+      activeSubTab: "candidates"
     };
   }
   function collabGroupTags() {
@@ -735,11 +737,6 @@
       clearInterval(collabTimerHandle); collabTimerHandle = null;
       collabSettle();
     } else render();
-  }
-  function collabAddGuestPreview() {
-    var n = state.collab.participants.filter(function (p) { return p.isGuest; }).length + 1;
-    state.collab.participants.push({ id: "guest-" + uid(), name: "訪客" + n, color: "#6C7383", ready: false, isGuest: true });
-    render();
   }
   function collabToggleRestaurantNoRender(restaurantId) {
     var existing = state.collab.pool.filter(function (item) { return item.restaurantId === restaurantId; })[0];
@@ -827,10 +824,6 @@
       recordDecision({ name: item.name, category: item.category });
     }
     render();
-  }
-  function collabForceSettleNow() {
-    if (collabTimerHandle) { clearInterval(collabTimerHandle); collabTimerHandle = null; }
-    collabSettle();
   }
   function collabSaveParticipantsAsGroup() {
     if (state.collab.participants.length === 0) { showToast("目前沒有參與者可以存"); return; }
@@ -1437,6 +1430,20 @@
     var remainStr = days > 0 ? (days + "天" + hours + "小時") : (hours > 0 ? (hours + "小時" + mins + "分") : (mins + "分鐘"));
     frag.appendChild(el("div", { class: "sectionLabel mono" }, "距離截止 " + formatDeadlineDisplay(state.collab.deadlineAt) + " 還剩 " + remainStr));
 
+    var seg = el("div", { class: "segControl" });
+    [["candidates", "候選 / 表態"], ["participants", "參與者(" + state.collab.participants.length + ")"]].forEach(function (pair) {
+      var b = el("button", { class: "segBtn" + (state.collab.activeSubTab === pair[0] ? " active" : "") }, pair[1]);
+      b.onclick = function () { state.collab.activeSubTab = pair[0]; render(); };
+      seg.appendChild(b);
+    });
+    frag.appendChild(seg);
+
+    frag.appendChild(state.collab.activeSubTab === "participants" ? renderCollabParticipantsTab() : renderCollabCandidatesTab());
+    return frag;
+  }
+
+  function renderCollabCandidatesTab() {
+    var wrap = document.createDocumentFragment();
     var card = el("div", { class: "pickerCard" });
     var head = el("div", { class: "pickerHead" });
     head.appendChild(el("div", { class: "phTitle mono" }, "候選店家"));
@@ -1466,15 +1473,28 @@
     }
 
     if (state.collab.pool.length > 0) {
-      var pills = el("div", { class: "selectedPillsRow" });
+      var isVoteFirst = state.collab.decisionMode === "vote_first";
+      var listWrap = el("div", { style: "margin-top:10px" });
       state.collab.pool.forEach(function (item) {
-        var pill = el("span", { class: "selectedPill" }, escapeHtml(item.name) + (item.isAdhoc ? " <span class='comingSoon'>本場次</span>" : ""));
-        var rm = el("button", {}, "✕");
+        var v = state.collab.votes[item.id] || { accept: 0, reject: 0 };
+        var row = el("div", { class: "poolItem" });
+        var mainText = escapeHtml(item.name) + (item.isAdhoc ? " <span class='comingSoon'>本場次</span>" : "") + (isVoteFirst ? " <span class='rowMeta mono' style='margin-left:6px'>✅" + v.accept + " ❌" + v.reject + "</span>" : "");
+        row.appendChild(el("span", {}, mainText));
+        var btnWrap = el("span", { style: "margin-left:auto;display:flex;gap:4px;align-items:center" });
+        if (isVoteFirst) {
+          var okBtn = el("button", { class: "ghostBtn" }, "✅");
+          okBtn.onclick = function () { collabVote(item.id, true); };
+          var noBtn = el("button", { class: "ghostBtn" }, "❌");
+          noBtn.onclick = function () { collabVote(item.id, false); };
+          btnWrap.appendChild(okBtn); btnWrap.appendChild(noBtn);
+        }
+        var rm = el("button", { class: "rm" }, "✕");
         rm.onclick = function () { collabRemovePoolItem(item.id); };
-        pill.appendChild(rm);
-        pills.appendChild(pill);
+        btnWrap.appendChild(rm);
+        row.appendChild(btnWrap);
+        listWrap.appendChild(row);
       });
-      card.appendChild(pills);
+      card.appendChild(listWrap);
     }
 
     var adhocWrap = el("div", { style: "margin-top:14px;padding-top:14px;border-top:1px solid #262B36" });
@@ -1507,25 +1527,13 @@
       var linkedIds = state.collab.pool.filter(function (i) { return !i.isAdhoc; }).map(function (i) { return i.restaurantId; });
       card.appendChild(renderPickList(state.restaurants, linkedIds, collabToggleRestaurant));
     }
-    frag.appendChild(card);
+    wrap.appendChild(card);
+    return wrap;
+  }
 
-    if (state.collab.decisionMode === "vote_first" && state.collab.pool.length > 0) {
-      frag.appendChild(el("div", { class: "sectionLabel mono", style: "margin-top:14px" }, "表態(示範:單機預覽,正式版每人各自在自己手機表態)"));
-      state.collab.pool.forEach(function (item) {
-        var v = state.collab.votes[item.id] || { accept: 0, reject: 0 };
-        var vrow = el("div", { class: "poolItem" }, "<span>" + escapeHtml(item.name) + " <span class='rowMeta mono' style='margin-left:6px'>✅" + v.accept + " ❌" + v.reject + "</span></span>");
-        var btnWrap = el("span", { style: "margin-left:auto;display:flex;gap:6px" });
-        var okBtn = el("button", { class: "ghostBtn" }, "✅");
-        okBtn.onclick = function () { collabVote(item.id, true); };
-        var noBtn = el("button", { class: "ghostBtn" }, "❌");
-        noBtn.onclick = function () { collabVote(item.id, false); };
-        btnWrap.appendChild(okBtn); btnWrap.appendChild(noBtn);
-        vrow.appendChild(btnWrap);
-        frag.appendChild(vrow);
-      });
-    }
-
-    frag.appendChild(el("div", { class: "sectionLabel mono", style: "margin-top:14px" }, "參與者(選填,主要給彼此心安,真正結算看時間)"));
+  function renderCollabParticipantsTab() {
+    var wrap = document.createDocumentFragment();
+    wrap.appendChild(el("div", { class: "excludeNote" }, "參與者清單選填,主要給彼此心安,真正結算只看截止時間到了沒有"));
     var pCard = el("div", { class: "card" });
     state.collab.participants.forEach(function (p) {
       var row = el("div", { class: "row" });
@@ -1537,17 +1545,9 @@
       row.appendChild(readyBtn);
       pCard.appendChild(row);
     });
-    if (state.collab.participants.length === 0) pCard.appendChild(el("div", { class: "emptyList" }, "還沒有人加入,先模擬新增訪客測試流程"));
-    frag.appendChild(pCard);
-    var addGuestBtn = el("button", { class: "ghostBtn" }, "+ 模擬新增訪客");
-    addGuestBtn.onclick = collabAddGuestPreview;
-    frag.appendChild(addGuestBtn);
-
-    var forceBtn = el("button", { class: "primaryBtn", style: "margin-top:14px" }, "⏱ 立即結算(測試用,模擬時間到)");
-    forceBtn.onclick = collabForceSettleNow;
-    frag.appendChild(forceBtn);
-    frag.appendChild(el("div", { class: "excludeNote", style: "text-align:center;margin-top:-10px" }, "正式版時間到會自動結算,這顆按鈕只是原型 demo 用"));
-    return frag;
+    if (state.collab.participants.length === 0) pCard.appendChild(el("div", { class: "emptyList" }, "還沒有人加入,分享上一步的邀請連結給大家吧"));
+    wrap.appendChild(pCard);
+    return wrap;
   }
 
   function renderCollabResult() {
