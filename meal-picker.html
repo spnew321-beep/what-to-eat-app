@@ -261,9 +261,9 @@
     { id: "g-default", name: "家庭", personIds: ["p1", "p2", "p3"] }
   ];
   var SEED_RESTAURANTS = [
-    { id: "s1", name: "巷口滷味", category: "小吃", price: 1, note: "記得加辣", favorite: true, x: null, y: null, personIds: [], customTags: ["常去"], menuItems: [{ id: "m1", name: "綜合滷味", price: 80 }, { id: "m2", name: "豆干", price: 20 }], photos: [] },
-    { id: "s2", name: "一風堂拉麵", category: "日式", price: 2, note: "", favorite: false, x: null, y: null, personIds: ["p1"], customTags: [], menuItems: [], photos: [] },
-    { id: "s3", name: "阿霞火鍋", category: "中式", price: 2, note: "湯頭濃郁", favorite: true, x: null, y: null, personIds: ["p3"], customTags: ["適合聚餐"], menuItems: [], photos: [] }
+    { id: "s1", name: "巷口滷味", category: "小吃", price: 1, note: "記得加辣", favorite: true, x: null, y: null, customTags: ["常去"], menuItems: [{ id: "m1", name: "綜合滷味", price: 80 }, { id: "m2", name: "豆干", price: 20 }], photos: [] },
+    { id: "s2", name: "一風堂拉麵", category: "日式", price: 2, note: "", favorite: false, x: null, y: null, customTags: ["哥哥最愛"], menuItems: [], photos: [] },
+    { id: "s3", name: "阿霞火鍋", category: "中式", price: 2, note: "湯頭濃郁", favorite: true, x: null, y: null, customTags: ["適合聚餐"], menuItems: [], photos: [] }
   ];
 
   var state = {
@@ -273,7 +273,6 @@
     openPinId: null,
 
     colCatFilter: "全部",
-    colPersonFilter: "全部",
     colCustomTagFilter: "全部",
     colFavOnly: false,
 
@@ -292,10 +291,11 @@
     },
 
     showModal: false, modalType: "restaurant", pendingLoc: null,
-    form: { name: "", category: CATEGORIES[0], price: 1, note: "", personIds: [], customTags: [], menuItems: [], photos: [] },
+    form: { name: "", category: CATEGORIES[0], price: 1, note: "", customTags: [], menuItems: [], photos: [] },
     personForm: { id: null, name: "", color: PERSON_COLORS[0], prefs: [], groupContextId: null },
     groupForm: { name: "" },
     morePanelOpen: null,
+    moreSubScreen: null,
 
     toastMsg: ""
   };
@@ -379,7 +379,7 @@
     persistRestaurants();
   }
   function removeRestaurant(id) {
-    if (!(window.confirm ? window.confirm("確定要刪除這間餐廳嗎?菜單、照片、人物標籤、自訂標籤都會一併刪除。") : true)) return;
+    if (!(window.confirm ? window.confirm("確定要刪除這間餐廳嗎?菜單、照片、自訂標籤都會一併刪除。") : true)) return;
     state.restaurants = state.restaurants.filter(function (r) { return r.id !== id; });
     state.pool = state.pool.filter(function (pid) { return pid !== id; });
     state.collab.pool = state.collab.pool.filter(function (pid) { return pid !== id; });
@@ -392,11 +392,11 @@
     state.form = existing
       ? {
           id: existing.id, name: existing.name, category: existing.category, price: existing.price,
-          note: existing.note, personIds: existing.personIds.slice(), customTags: (existing.customTags || []).slice(),
+          note: existing.note, customTags: (existing.customTags || []).slice(),
           menuItems: (existing.menuItems || []).map(function (m) { return Object.assign({}, m); }),
           photos: (existing.photos || []).slice()
         }
-      : { id: null, name: "", category: CATEGORIES[0], price: 1, note: "", personIds: [], customTags: [], menuItems: [], photos: [] };
+      : { id: null, name: "", category: CATEGORIES[0], price: 1, note: "", customTags: [], menuItems: [], photos: [] };
     state.showModal = true;
     render();
   }
@@ -406,7 +406,7 @@
       state.restaurants = state.restaurants.map(function (r) {
         return r.id === state.form.id ? Object.assign({}, r, {
           name: state.form.name.trim(), category: state.form.category, price: state.form.price,
-          note: state.form.note.trim(), personIds: state.form.personIds.slice(), customTags: state.form.customTags.slice(),
+          note: state.form.note.trim(), customTags: state.form.customTags.slice(),
           menuItems: state.form.menuItems.slice(), photos: state.form.photos.slice()
         }) : r;
       });
@@ -415,7 +415,7 @@
         id: uid(), name: state.form.name.trim(), category: state.form.category, price: state.form.price,
         note: state.form.note.trim(), favorite: false,
         x: state.pendingLoc ? state.pendingLoc.x : null, y: state.pendingLoc ? state.pendingLoc.y : null,
-        personIds: state.form.personIds.slice(), customTags: state.form.customTags.slice(),
+        customTags: state.form.customTags.slice(),
         menuItems: state.form.menuItems.slice(), photos: state.form.photos.slice()
       };
       state.restaurants = [item].concat(state.restaurants);
@@ -464,7 +464,35 @@
     persistRestaurants();
   }
 
-  // ---------- tag ops ----------
+  // ---------- custom tag ops (freeform, no dedicated table) ----------
+  function allCustomTagNames() {
+    return Array.from(new Set(state.restaurants.reduce(function (acc, r) { return acc.concat(r.customTags || []); }, [])));
+  }
+  function renameCustomTagGlobally(oldName) {
+    var name = window.prompt ? window.prompt("重新命名標籤:", oldName) : null;
+    if (!name) return;
+    name = name.trim();
+    if (!name || name === oldName) return;
+    state.restaurants = state.restaurants.map(function (r) {
+      if (!r.customTags || r.customTags.indexOf(oldName) === -1) return r;
+      var next = r.customTags.filter(function (t) { return t !== oldName; });
+      if (next.indexOf(name) === -1) next = next.concat([name]);
+      return Object.assign({}, r, { customTags: next });
+    });
+    if (state.colCustomTagFilter === oldName) state.colCustomTagFilter = name;
+    persistRestaurants();
+  }
+  function deleteCustomTagGlobally(name) {
+    if (!(window.confirm ? window.confirm("確定要刪除「" + name + "」這個自訂標籤嗎?會從所有用到的餐廳上移除。") : true)) return;
+    state.restaurants = state.restaurants.map(function (r) {
+      if (!r.customTags || r.customTags.indexOf(name) === -1) return r;
+      return Object.assign({}, r, { customTags: r.customTags.filter(function (t) { return t !== name; }) });
+    });
+    if (state.colCustomTagFilter === name) state.colCustomTagFilter = "全部";
+    persistRestaurants();
+  }
+
+  // ---------- person ops ----------
   function openAddPersonModal(groupContextId, existing) {
     state.modalType = "person";
     state.personForm = existing
@@ -496,11 +524,10 @@
     persistGroups();
   }
   function deletePersonGlobally(personId) {
-    if (!(window.confirm ? window.confirm("確定要完全刪除這個人嗎?會從所有群組移除,餐廳上標記他的人物標籤也會一併清除。") : true)) return;
+    if (!(window.confirm ? window.confirm("確定要完全刪除這個成員標籤嗎?會從所有群組移除。") : true)) return;
     state.people = state.people.filter(function (p) { return p.id !== personId; });
     state.groups = state.groups.map(function (g) { return Object.assign({}, g, { personIds: g.personIds.filter(function (id) { return id !== personId; }) }); });
-    state.restaurants = state.restaurants.map(function (r) { return Object.assign({}, r, { personIds: r.personIds.filter(function (id) { return id !== personId; }) }); });
-    persistGroups(); persistPeople(); persistRestaurants();
+    persistGroups(); persistPeople();
   }
   function addExistingPersonToGroup(groupId, personId) {
     state.groups = state.groups.map(function (g) { return g.id === groupId ? Object.assign({}, g, { personIds: g.personIds.indexOf(personId) === -1 ? g.personIds.concat([personId]) : g.personIds }) : g; });
@@ -549,16 +576,16 @@
     else state.pool = state.pool.filter(function (x) { return x !== id; });
     render();
   }
-  function addPersonFavoritesToPool(personId) {
-    var toAdd = state.restaurants.filter(function (r) { return r.personIds.indexOf(personId) !== -1; }).map(function (r) { return r.id; });
+  function addCustomTagFavoritesToPool(tagName) {
+    var toAdd = state.restaurants.filter(function (r) { return (r.customTags || []).indexOf(tagName) !== -1; }).map(function (r) { return r.id; });
     var setPool = {}; state.pool.forEach(function (id) { setPool[id] = true; });
     var allIn = toAdd.every(function (id) { return setPool[id]; });
     if (allIn) state.pool = state.pool.filter(function (id) { return toAdd.indexOf(id) === -1; });
     else toAdd.forEach(function (id) { if (state.pool.indexOf(id) === -1) state.pool.push(id); });
     render();
   }
-  function personPoolActive(personId) {
-    var favIds = state.restaurants.filter(function (r) { return r.personIds.indexOf(personId) !== -1; }).map(function (r) { return r.id; });
+  function customTagPoolActive(tagName) {
+    var favIds = state.restaurants.filter(function (r) { return (r.customTags || []).indexOf(tagName) !== -1; }).map(function (r) { return r.id; });
     if (favIds.length === 0) return false;
     return favIds.every(function (id) { return state.pool.indexOf(id) !== -1; });
   }
@@ -666,14 +693,12 @@
     var metaY = nameBottom + used - 54 + 70;
     ctx.fillText(restaurant.category + "  ・  " + priceLabel(restaurant.price), cardX + 36, metaY);
     var tagY = metaY + 46;
-    if (restaurant.personIds && restaurant.personIds.length) {
+    if (restaurant.customTags && restaurant.customTags.length) {
       var tx = cardX + 36;
-      restaurant.personIds.forEach(function (pid) {
-        var p = personById(pid); if (!p) return;
-        var label2 = p.name;
+      restaurant.customTags.forEach(function (label2) {
         ctx.font = "14px sans-serif";
         var tw = ctx.measureText(label2).width + 24;
-        ctx.fillStyle = p.color;
+        ctx.fillStyle = "#5C7A6B";
         roundRectPath(ctx, tx, tagY, tw, 30, 15); ctx.fill();
         ctx.fillStyle = "#F3ECDD"; ctx.textAlign = "left";
         ctx.fillText(label2, tx + 12, tagY + 20);
@@ -748,12 +773,6 @@
       adhocForm: { name: "", category: CATEGORIES[0] }, savedAsGroup: false, browseOpen: false,
       activeSubTab: "candidates"
     };
-  }
-  function collabGroupTags() {
-    if (state.collab.audienceType !== "group" || !state.collab.audienceGroupId) return [];
-    var g = groupById(state.collab.audienceGroupId);
-    if (!g) return [];
-    return g.personIds.map(personById).filter(Boolean);
   }
   function collabChooseGroup(groupId) {
     var g = groupById(groupId);
@@ -907,6 +926,10 @@
       var backBtn = el("button", { class: "backBtn" }, "←");
       backBtn.onclick = function () { state.groupsSelectedId = null; render(); };
       headerLeft.appendChild(backBtn);
+    } else if (state.tab === "更多" && state.moreSubScreen) {
+      var backBtn2 = el("button", { class: "backBtn" }, "←");
+      backBtn2.onclick = function () { state.moreSubScreen = null; render(); };
+      headerLeft.appendChild(backBtn2);
     }
     headerLeft.appendChild(el("div", { class: "title" }, "這餐吃什麼<small class='mono'>" + headerSubtitle() + "</small>"));
     header.appendChild(headerLeft);
@@ -923,6 +946,10 @@
       var addGBtn = el("button", { class: "addBtn" }, "＋");
       addGBtn.onclick = openAddGroupModal;
       header.appendChild(addGBtn);
+    } else if (state.tab === "更多" && state.moreSubScreen === "customCategories") {
+      var addCatMBtn = el("button", { class: "addBtn" }, "＋");
+      addCatMBtn.onclick = addCustomCategory;
+      header.appendChild(addCatMBtn);
     }
     wrap.appendChild(header);
 
@@ -955,6 +982,11 @@
       return "群組 · " + state.groups.length + " 個";
     }
     if (state.tab === "決策") return "決策";
+    if (state.tab === "更多") {
+      if (state.moreSubScreen === "customTags") return "自訂標籤管理";
+      if (state.moreSubScreen === "customCategories") return "食物類型管理";
+      return "更多";
+    }
     return "更多";
   }
 
@@ -1027,12 +1059,15 @@
   function renderCollectionTab() {
     var frag = document.createDocumentFragment();
 
-    frag.appendChild(el("div", { class: "filterGroupLabel mono" }, "食物類型"));
+    frag.appendChild(el("div", { class: "filterGroupLabel mono" }, "篩選"));
     var catList = Array.from(new Set(state.restaurants.map(function (r) { return r.category; })));
     var orderedCategories = CATEGORIES.concat(state.customCategories.map(function (c) { return c.name; }));
     var extraCategories = catList.filter(function (c) { return orderedCategories.indexOf(c) === -1; });
     var presentCategories = orderedCategories.concat(extraCategories).filter(function (c) { return catList.indexOf(c) !== -1; });
     var f1 = el("div", { class: "filters", style: "align-items:center" });
+    var favChip = el("button", { class: "chip" + (state.colFavOnly ? " active" : "") }, "★ 只看最愛");
+    favChip.onclick = function () { state.colFavOnly = !state.colFavOnly; render(); };
+    f1.appendChild(favChip);
     var catSelect = el("select", {});
     catSelect.style.cssText = "border:1px solid #3A3F4C;background:#20232B;color:#F3ECDD;border-radius:999px;padding:7px 13px;font-size:13px;";
     var allCatOpt = el("option", { value: "全部" }, "全部類型");
@@ -1044,30 +1079,9 @@
     });
     catSelect.onchange = function (e) { state.colCatFilter = e.target.value; render(); };
     f1.appendChild(catSelect);
-    frag.appendChild(f1);
-
-    frag.appendChild(el("div", { class: "filterGroupLabel mono" }, "成員"));
-    var f2 = el("div", { class: "filters", style: "align-items:center" });
-    var favChip = el("button", { class: "chip" + (state.colFavOnly ? " active" : "") }, "★ 只看最愛");
-    favChip.onclick = function () { state.colFavOnly = !state.colFavOnly; render(); };
-    f2.appendChild(favChip);
-    var personSelect = el("select", {});
-    personSelect.style.cssText = "border:1px solid #3A3F4C;background:#20232B;color:#F3ECDD;border-radius:999px;padding:7px 13px;font-size:13px;";
-    var allPersonOpt = el("option", { value: "全部" }, "全部成員");
-    personSelect.appendChild(allPersonOpt);
-    state.people.forEach(function (t) {
-      var opt = el("option", { value: t.id }, escapeHtml(t.name));
-      if (state.colPersonFilter === t.id) opt.setAttribute("selected", "selected");
-      personSelect.appendChild(opt);
-    });
-    personSelect.onchange = function (e) { state.colPersonFilter = e.target.value; render(); };
-    f2.appendChild(personSelect);
-    frag.appendChild(f2);
 
     var allCustomTags = Array.from(new Set(state.restaurants.reduce(function (acc, r) { return acc.concat(r.customTags || []); }, [])));
     if (allCustomTags.length > 0) {
-      frag.appendChild(el("div", { class: "filterGroupLabel mono" }, "自訂標籤"));
-      var f2b = el("div", { class: "filters" });
       var customTagSelect = el("select", {});
       customTagSelect.style.cssText = "border:1px solid #3A3F4C;background:#20232B;color:#F3ECDD;border-radius:999px;padding:7px 13px;font-size:13px;";
       var allCustomTagOpt = el("option", { value: "全部" }, "全部標籤");
@@ -1078,9 +1092,9 @@
         customTagSelect.appendChild(opt);
       });
       customTagSelect.onchange = function (e) { state.colCustomTagFilter = e.target.value; render(); };
-      f2b.appendChild(customTagSelect);
-      frag.appendChild(f2b);
+      f1.appendChild(customTagSelect);
     }
+    frag.appendChild(f1);
 
     var list = filteredCollection();
     var lw = el("div", { class: "card" });
@@ -1091,15 +1105,6 @@
       var main = el("div", { class: "rowMain" });
       main.appendChild(el("div", { class: "rowName" }, escapeHtml(r.name) + (r.x != null ? " <span style='font-size:11px;color:#5C7A6B'>📍</span>" : "")));
       main.appendChild(el("div", { class: "rowMeta mono" }, escapeHtml(r.category) + " ・ " + priceLabel(r.price) + (r.note ? " ・ " + escapeHtml(r.note) : "")));
-      if (r.personIds && r.personIds.length) {
-        var who = el("div", { class: "rowWho" });
-        r.personIds.forEach(function (pid) {
-          var p = personById(pid); if (!p) return;
-          var d = el("span", { class: "dot", style: "background:" + p.color }, initials(p.name));
-          d.title = p.name; who.appendChild(d);
-        });
-        main.appendChild(who);
-      }
       if (r.customTags && r.customTags.length) {
         var ctWrap = el("div", { class: "rowWho" });
         r.customTags.forEach(function (t) { ctWrap.appendChild(el("span", { class: "prefTag" }, escapeHtml(t))); });
@@ -1124,7 +1129,6 @@
     var list = state.restaurants;
     if (state.colCatFilter !== "全部") list = list.filter(function (r) { return r.category === state.colCatFilter; });
     if (state.colFavOnly) list = list.filter(function (r) { return r.favorite; });
-    if (state.colPersonFilter !== "全部") list = list.filter(function (r) { return r.personIds.indexOf(state.colPersonFilter) !== -1; });
     if (state.colCustomTagFilter !== "全部") list = list.filter(function (r) { return (r.customTags || []).indexOf(state.colCustomTagFilter) !== -1; });
     return list;
   }
@@ -1135,14 +1139,14 @@
     var frag = document.createDocumentFragment();
 
     var tagHead = el("div", { class: "pickerHead", style: "max-width:560px;width:100%" });
-    tagHead.appendChild(el("div", { class: "phTitle mono" }, "所有成員"));
-    var addTagBtn = el("button", { class: "ghostBtn" }, "＋ 新增成員");
+    tagHead.appendChild(el("div", { class: "phTitle mono" }, "所有成員標籤"));
+    var addTagBtn = el("button", { class: "ghostBtn" }, "＋ 新增成員標籤");
     addTagBtn.onclick = function () { openAddPersonModal(null, null); };
     tagHead.appendChild(addTagBtn);
     frag.appendChild(tagHead);
 
     var tagListWrap = el("div", { class: "card" });
-    if (state.people.length === 0) tagListWrap.appendChild(el("div", { class: "emptyList" }, "還沒有成員,點上面「＋新增成員」新增第一個"));
+    if (state.people.length === 0) tagListWrap.appendChild(el("div", { class: "emptyList" }, "還沒有成員標籤,點上面「＋新增成員標籤」新增第一個"));
     state.people.forEach(function (p) {
       var row = el("div", { class: "row" });
       var main = el("div", { class: "rowMain" }, "<span class='dot' style='background:" + p.color + "'>" + initials(p.name) + "</span> " + escapeHtml(p.name));
@@ -1179,7 +1183,7 @@
 
     var lw = el("div", { class: "card" });
     var members = g.personIds.map(personById).filter(Boolean);
-    if (members.length === 0) lw.appendChild(el("div", { class: "emptyList" }, "這個群組還沒有成員,點右上角「＋」新增"));
+    if (members.length === 0) lw.appendChild(el("div", { class: "emptyList" }, "這個群組還沒有成員標籤,點右上角「＋」新增"));
     members.forEach(function (p) {
       var card = el("div", { class: "memberCard" });
       var head = el("div", { class: "memberHead" });
@@ -1191,8 +1195,6 @@
       card.appendChild(head);
       var tags = el("div", { class: "prefTags" });
       (p.prefs || []).forEach(function (pr) { tags.appendChild(el("span", { class: "prefTag" }, escapeHtml(pr))); });
-      var favCount = state.restaurants.filter(function (r) { return r.personIds.indexOf(p.id) !== -1; }).length;
-      tags.appendChild(el("span", { class: "prefTag" }, "❤ " + favCount + " 間喜愛的店"));
       card.appendChild(tags);
       var memberActions = el("div", { style: "display:flex;gap:8px;margin-top:10px" });
       var rmBtn = el("button", { class: "ghostBtn" }, "移出此群組");
@@ -1207,7 +1209,7 @@
 
     var others = state.people.filter(function (p) { return g.personIds.indexOf(p.id) === -1; });
     if (others.length > 0) {
-      var addExistBtn = el("button", { class: "browseToggle" }, state.groupAddExistOpen ? "從其他成員中加入既有的人 ▲" : "從其他成員中加入既有的人 ▾");
+      var addExistBtn = el("button", { class: "browseToggle" }, state.groupAddExistOpen ? "從其他成員標籤中加入既有的 ▲" : "從其他成員標籤中加入既有的 ▾");
       addExistBtn.onclick = function () { state.groupAddExistOpen = !state.groupAddExistOpen; render(); };
       frag.appendChild(addExistBtn);
       if (state.groupAddExistOpen) {
@@ -1292,10 +1294,10 @@
     card.appendChild(head);
 
     var mrow = el("div", { class: "poolMemberRow" });
-    state.people.forEach(function (p) {
-      var favCount = state.restaurants.filter(function (r) { return r.personIds.indexOf(p.id) !== -1; }).length;
-      var chip = el("div", { class: "memberChip" + (personPoolActive(p.id) ? " active" : "") }, "<span class='dot' style='background:" + p.color + ";width:16px;height:16px;font-size:8px'>" + initials(p.name) + "</span><span>" + escapeHtml(p.name) + "(" + favCount + ")</span>");
-      chip.onclick = function () { addPersonFavoritesToPool(p.id); };
+    allCustomTagNames().forEach(function (name) {
+      var favCount = state.restaurants.filter(function (r) { return (r.customTags || []).indexOf(name) !== -1; }).length;
+      var chip = el("div", { class: "memberChip" + (customTagPoolActive(name) ? " active" : "") }, "<span>🏷️ " + escapeHtml(name) + "(" + favCount + ")</span>");
+      chip.onclick = function () { addCustomTagFavoritesToPool(name); };
       mrow.appendChild(chip);
     });
     card.appendChild(mrow);
@@ -1343,11 +1345,10 @@
       t.appendChild(el("div", { class: "ticketLabel" }, "今晚就吃這間"));
       t.appendChild(el("div", { class: "ticketName" }, escapeHtml(state.drawn.name)));
       t.appendChild(el("div", { class: "ticketMeta mono" }, escapeHtml(state.drawn.category) + " ・ " + priceLabel(state.drawn.price)));
-      if (state.drawn.personIds && state.drawn.personIds.length) {
+      if (state.drawn.customTags && state.drawn.customTags.length) {
         var whoWrap = el("div", { class: "ticketWho" });
-        state.drawn.personIds.forEach(function (pid) {
-          var p = personById(pid); if (!p) return;
-          whoWrap.appendChild(el("span", { class: "whoTag", style: "background:" + p.color }, escapeHtml(p.name)));
+        state.drawn.customTags.forEach(function (label2) {
+          whoWrap.appendChild(el("span", { class: "whoTag", style: "background:#5C7A6B" }, escapeHtml(label2)));
         });
         t.appendChild(whoWrap);
       }
@@ -1446,7 +1447,7 @@
   function renderCollabChooseAudience() {
     var frag = document.createDocumentFragment();
     frag.appendChild(el("div", { class: "sectionLabel mono" }, "這次要找誰一起決定?"));
-    frag.appendChild(el("div", { class: "excludeNote" }, "選群組只是快速把該群組成員標過的店家拉進候選,真正會加入場次、按完成的是點連結進來的人,跟選哪個群組無關"));
+    frag.appendChild(el("div", { class: "excludeNote" }, "選群組會把這個群組的人設為這次決策的邀請/通知對象(原型階段還沒接真帳號,無法真的發送通知);真正會加入場次、按完成的還是點連結進來的人,候選店家請用下面的自訂標籤或瀏覽清單自己湊"));
     if (state.groups.length > 0) {
       state.groups.forEach(function (g) {
         var b = el("button", { class: "bigChoiceBtn" }, "<span class='bcTitle'>👥 " + escapeHtml(g.name) + "</span><span class='bcDesc'>已存的群組 · " + g.personIds.length + " 人</span>");
@@ -1454,7 +1455,7 @@
         frag.appendChild(b);
       });
     }
-    var adhocBtn = el("button", { class: "bigChoiceBtn" }, "<span class='bcTitle'>🔗 自由邀請</span><span class='bcDesc'>不借用任何成員,用連結臨時邀請大家加入</span>");
+    var adhocBtn = el("button", { class: "bigChoiceBtn" }, "<span class='bcTitle'>🔗 自由邀請</span><span class='bcDesc'>不指定群組,用連結臨時邀請大家加入</span>");
     adhocBtn.onclick = collabChooseAdhoc;
     frag.appendChild(adhocBtn);
     return frag;
@@ -1557,13 +1558,13 @@
     head.appendChild(el("div", { class: "phCount mono" }, state.collab.pool.length + " 間"));
     card.appendChild(head);
 
-    var tags = collabGroupTags();
-    if (tags.length > 0) {
+    var quickTagNames = allCustomTagNames();
+    if (quickTagNames.length > 0) {
       var mrow = el("div", { class: "poolMemberRow" });
-      tags.forEach(function (p) {
-        var favIds = state.restaurants.filter(function (r) { return r.personIds.indexOf(p.id) !== -1; }).map(function (r) { return r.id; });
+      quickTagNames.forEach(function (name) {
+        var favIds = state.restaurants.filter(function (r) { return (r.customTags || []).indexOf(name) !== -1; }).map(function (r) { return r.id; });
         var allIn = favIds.length > 0 && favIds.every(collabPoolHasRestaurant);
-        var chip = el("div", { class: "memberChip" + (allIn ? " active" : "") }, "<span class='dot' style='background:" + p.color + ";width:16px;height:16px;font-size:8px'>" + initials(p.name) + "</span><span>加入" + escapeHtml(p.name) + "標記(" + favIds.length + ")</span>");
+        var chip = el("div", { class: "memberChip" + (allIn ? " active" : "") }, "<span>🏷️ 加入「" + escapeHtml(name) + "」(" + favIds.length + ")</span>");
         chip.onclick = function () {
           favIds.forEach(function (id) {
             var has = collabPoolHasRestaurant(id);
@@ -1575,8 +1576,8 @@
         mrow.appendChild(chip);
       });
       card.appendChild(mrow);
-    } else if (state.collab.audienceType === "adhoc") {
-      card.appendChild(el("div", { class: "excludeNote" }, "自由邀請模式沒有現成成員,直接從下面清單挑選,或臨時新增店家"));
+    } else {
+      card.appendChild(el("div", { class: "excludeNote" }, "還沒有自訂標籤可以快速拉候選,直接從下面清單挑選,或臨時新增店家"));
     }
 
     if (state.collab.pool.length > 0) {
@@ -1706,7 +1707,18 @@
 
   // ---------- MORE TAB ----------
   function renderMoreTab() {
+    if (state.moreSubScreen === "customTags") return renderCustomTagsManage();
+    if (state.moreSubScreen === "customCategories") return renderCustomCategoriesManage();
     var frag = document.createDocumentFragment();
+
+    var manageGroup = el("div", { class: "moreGroup" });
+    [["customTags", "🏷️ 自訂標籤管理"], ["customCategories", "🍜 食物類型管理"]].forEach(function (pair) {
+      var mrow = el("div", { class: "moreRow" }, "<span class='mrLabel'>" + pair[1] + "</span><span class='mrArrow'>›</span>");
+      mrow.onclick = function () { state.moreSubScreen = pair[0]; render(); };
+      manageGroup.appendChild(mrow);
+    });
+    frag.appendChild(manageGroup);
+
     var items = [
       { key: "privacy", label: "🔒 隱私權政策", ready: false, notReadyMsg: "隱私權政策需要接上正式帳號系統後,依實際蒐集的資料範圍撰寫內容才能上線" },
       { key: "terms", label: "📄 服務條款", ready: false, notReadyMsg: "服務條款需要等正式營運模式(帳號、協作場次規則)確定後才能撰寫" },
@@ -1729,6 +1741,48 @@
     });
     frag.appendChild(group);
     frag.appendChild(el("div", { class: "appMeta mono" }, "這餐吃什麼 · 原型版"));
+    return frag;
+  }
+
+  function renderCustomTagsManage() {
+    var frag = document.createDocumentFragment();
+    var names = allCustomTagNames();
+    var lw = el("div", { class: "card" });
+    if (names.length === 0) lw.appendChild(el("div", { class: "emptyList" }, "還沒有任何自訂標籤。想新增,直接在餐廳的編輯表單裡打字加入即可。"));
+    names.forEach(function (name) {
+      var row = el("div", { class: "row" });
+      var count = state.restaurants.filter(function (r) { return (r.customTags || []).indexOf(name) !== -1; }).length;
+      row.appendChild(el("div", { class: "rowMain" }, "<div class='rowName'>" + escapeHtml(name) + "</div><div class='rowMeta mono'>" + count + " 間餐廳使用</div>"));
+      var editBtn = el("button", { class: "iconBtn" }, "✎");
+      editBtn.onclick = function () { renameCustomTagGlobally(name); };
+      row.appendChild(editBtn);
+      var delBtn = el("button", { class: "iconBtn" }, "🗑");
+      delBtn.onclick = function () { deleteCustomTagGlobally(name); };
+      row.appendChild(delBtn);
+      lw.appendChild(row);
+    });
+    frag.appendChild(lw);
+    frag.appendChild(el("div", { class: "excludeNote", style: "margin-top:10px" }, "想新增新的自訂標籤,直接在餐廳的編輯表單裡打字加入即可,這裡只負責改名/清掉不用的。"));
+    return frag;
+  }
+
+  function renderCustomCategoriesManage() {
+    var frag = document.createDocumentFragment();
+    var lw = el("div", { class: "card" });
+    if (state.customCategories.length === 0) lw.appendChild(el("div", { class: "emptyList" }, "還沒有自訂類型,點右上角「＋」新增第一個"));
+    state.customCategories.forEach(function (cc) {
+      var row = el("div", { class: "row" });
+      var count = state.restaurants.filter(function (r) { return r.category === cc.name; }).length;
+      row.appendChild(el("div", { class: "rowMain" }, "<div class='rowName'>" + escapeHtml(cc.name) + "</div><div class='rowMeta mono'>" + count + " 間餐廳使用</div>"));
+      var editBtn = el("button", { class: "iconBtn" }, "✎");
+      editBtn.onclick = function () { renameCustomCategory(cc.id); };
+      row.appendChild(editBtn);
+      var delBtn = el("button", { class: "iconBtn" }, "🗑");
+      delBtn.onclick = function () { deleteCustomCategory(cc.id); };
+      row.appendChild(delBtn);
+      lw.appendChild(row);
+    });
+    frag.appendChild(lw);
     return frag;
   }
 
@@ -1764,7 +1818,12 @@
       modal.appendChild(f1);
 
       var f2 = el("div", { class: "field" });
-      f2.appendChild(el("label", {}, "類型"));
+      var f2Head = el("div", { style: "display:flex;justify-content:space-between;align-items:center;margin-bottom:5px" });
+      f2Head.appendChild(el("label", { style: "margin-bottom:0" }, "類型"));
+      var catManageBtn = el("button", { style: "background:none;border:none;color:#5C7A6B;font-size:14px;cursor:pointer;padding:2px 4px;" }, "✎ 編輯類型");
+      catManageBtn.onclick = function () { state.modalType = "categoryManage"; render(); };
+      f2Head.appendChild(catManageBtn);
+      f2.appendChild(f2Head);
       var catRow = el("div", { class: "catRow" });
       CATEGORIES.forEach(function (c) {
         var cb = el("button", { class: "catChip" + (state.form.category === c ? " active" : "") }, escapeHtml(c));
@@ -1772,21 +1831,10 @@
         catRow.appendChild(cb);
       });
       state.customCategories.forEach(function (cc) {
-        var ccWrap = el("span", { class: "customCatWrap" });
         var cb = el("button", { class: "catChip" + (state.form.category === cc.name ? " active" : "") }, escapeHtml(cc.name));
         cb.onclick = function () { state.form.category = cc.name; render(); };
-        ccWrap.appendChild(cb);
-        var editB = el("button", { class: "customCatEditBtn" }, "✎");
-        editB.onclick = function (e) { e.stopPropagation(); renameCustomCategory(cc.id); };
-        ccWrap.appendChild(editB);
-        var delB = el("button", { class: "customCatDelBtn" }, "✕");
-        delB.onclick = function (e) { e.stopPropagation(); deleteCustomCategory(cc.id); };
-        ccWrap.appendChild(delB);
-        catRow.appendChild(ccWrap);
+        catRow.appendChild(cb);
       });
-      var addCatBtn = el("button", { class: "catChip", style: "border-style:dashed;" }, "＋ 新增自訂類型");
-      addCatBtn.onclick = addCustomCategory;
-      catRow.appendChild(addCatBtn);
       f2.appendChild(catRow);
       modal.appendChild(f2);
 
@@ -1800,24 +1848,6 @@
       });
       f3.appendChild(priceRow);
       modal.appendChild(f3);
-
-      if (state.people.length > 0) {
-        var f5 = el("div", { class: "field" });
-        f5.appendChild(el("label", {}, "人物標籤(可複選)"));
-        var mpRow = el("div", { class: "memberPickRow" });
-        state.people.forEach(function (p) {
-          var active = state.form.personIds.indexOf(p.id) !== -1;
-          var mc = el("button", { class: "memberPickChip" + (active ? " active" : "") }, escapeHtml(p.name));
-          mc.onclick = function () {
-            if (active) state.form.personIds = state.form.personIds.filter(function (x) { return x !== p.id; });
-            else state.form.personIds = state.form.personIds.concat([p.id]);
-            render();
-          };
-          mpRow.appendChild(mc);
-        });
-        f5.appendChild(mpRow);
-        modal.appendChild(f5);
-      }
 
       var f5b = el("div", { class: "field" });
       f5b.appendChild(el("label", {}, "自訂標籤(自由輸入,選填)"));
@@ -1913,8 +1943,35 @@
       submitBtnRef.onclick = submitRestaurantForm;
       modal.appendChild(submitBtnRef);
 
+    } else if (state.modalType === "categoryManage") {
+      var cmHead = el("div", { class: "modalHead" }, "<span>食物類型管理</span>");
+      var cmBack = el("button", {}, "←");
+      cmBack.onclick = function () { state.modalType = "restaurant"; render(); };
+      cmHead.appendChild(cmBack);
+      modal.appendChild(cmHead);
+
+      modal.appendChild(el("div", { class: "excludeNote", style: "margin-bottom:14px" }, "8 種預設類型不能改名或刪除;下面是你自己新增的類型,可以改名或刪除。"));
+
+      if (state.customCategories.length === 0) {
+        modal.appendChild(el("div", { style: "text-align:center;color:#7A7263;font-size:13px;padding:16px 0;" }, "還沒有自訂類型"));
+      }
+      state.customCategories.forEach(function (cc) {
+        var cmRow = el("div", { style: "display:flex;align-items:center;gap:8px;padding:10px 2px;border-bottom:1px solid #E6E0CE;" });
+        cmRow.appendChild(el("span", { style: "flex:1;font-size:14px;color:#232019;" }, escapeHtml(cc.name)));
+        var cmEditB = el("button", { class: "customCatEditBtn", style: "border-left:1px solid #C9BFA5;border-radius:8px;" }, "✎");
+        cmEditB.onclick = function () { renameCustomCategory(cc.id); };
+        var cmDelB = el("button", { class: "customCatDelBtn", style: "border-left:1px solid #C9BFA5;border-radius:8px;" }, "🗑");
+        cmDelB.onclick = function () { deleteCustomCategory(cc.id); };
+        cmRow.appendChild(cmEditB); cmRow.appendChild(cmDelB);
+        modal.appendChild(cmRow);
+      });
+
+      var addCatBtn2 = el("button", { class: "addRowBtn", style: "margin-top:14px" }, "＋ 新增類型");
+      addCatBtn2.onclick = addCustomCategory;
+      modal.appendChild(addCatBtn2);
+
     } else if (state.modalType === "person") {
-      var phead = el("div", { class: "modalHead" }, "<span>" + (state.personForm.id ? "編輯成員" : "新增成員") + "</span>");
+      var phead = el("div", { class: "modalHead" }, "<span>" + (state.personForm.id ? "編輯成員標籤" : "新增成員標籤") + "</span>");
       var pclose = el("button", {}, "✕");
       pclose.onclick = function () { state.showModal = false; render(); };
       phead.appendChild(pclose);
@@ -1957,7 +2014,7 @@
       pf3.appendChild(prefRow);
       modal.appendChild(pf3);
 
-      var psubmitRef = el("button", { class: "submitBtn" }, state.personForm.id ? "儲存變更" : (state.personForm.groupContextId ? "加入群組" : "新增成員"));
+      var psubmitRef = el("button", { class: "submitBtn" }, state.personForm.id ? "儲存變更" : (state.personForm.groupContextId ? "加入群組" : "新增成員標籤"));
       psubmitRef.disabled = !state.personForm.name.trim();
       psubmitRef.onclick = submitPersonForm;
       modal.appendChild(psubmitRef);
