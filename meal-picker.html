@@ -841,10 +841,10 @@
       var addBtn = el("button", { class: "addBtn" }, "＋");
       addBtn.onclick = function () { openRestaurantModal(null, null); };
       header.appendChild(addBtn);
-    } else if (state.tab === "家人") {
-      var addMBtn = el("button", { class: "addBtn" }, "＋");
-      addMBtn.onclick = function () { openAddPersonModal(null); };
-      header.appendChild(addMBtn);
+    } else if (state.tab === "更多" && state.moreSubScreen === "familyPrefs") {
+      var addFamBtn = el("button", { class: "addBtn" }, "＋");
+      addFamBtn.onclick = function () { openAddPersonModal(null); };
+      header.appendChild(addFamBtn);
     } else if (state.tab === "更多" && state.moreSubScreen === "customCategories") {
       var addCatMBtn = el("button", { class: "addBtn" }, "＋");
       addCatMBtn.onclick = addCustomCategory;
@@ -854,7 +854,7 @@
 
     if (state.tab === "地圖") wrap.appendChild(renderMapTab());
     else if (state.tab === "收藏") wrap.appendChild(renderCollectionTab());
-    else if (state.tab === "家人") wrap.appendChild(renderGroupsTab());
+    else if (state.tab === "群組") wrap.appendChild(renderGroupsTab());
     else if (state.tab === "決策") wrap.appendChild(renderDecisionTab());
     else wrap.appendChild(renderMoreTab());
 
@@ -873,9 +873,10 @@
 
   function headerSubtitle() {
     if (state.tab === "地圖" || state.tab === "收藏") return "我的收藏 · " + state.restaurants.length + " 間";
-    if (state.tab === "家人") return "家人 · " + state.people.length + " 位";
+    if (state.tab === "群組") return "群組";
     if (state.tab === "決策") return "決策";
     if (state.tab === "更多") {
+      if (state.moreSubScreen === "familyPrefs") return "家人偏好小抄";
       if (state.moreSubScreen === "customTags") return "自訂標籤管理";
       if (state.moreSubScreen === "customCategories") return "食物類型管理";
       return "更多";
@@ -885,7 +886,7 @@
 
   function renderTabbar() {
     var bar = el("div", { class: "tabbar" });
-    [["地圖","🗺️"],["收藏","⭐"],["家人","👥"],["決策","🎯"],["更多","☰"]].forEach(function (pair) {
+    [["地圖","🗺️"],["收藏","⭐"],["群組","👥"],["決策","🎯"],["更多","☰"]].forEach(function (pair) {
       var name = pair[0], icon = pair[1];
       var b = el("button", { class: "tabBtn" + (state.tab === name ? " active" : "") }, "<span class='ic'>" + icon + "</span><span>" + name + "</span>");
       b.onclick = function () { state.tab = name; state.openPinId = null; render(); };
@@ -1026,46 +1027,22 @@
     return list;
   }
 
-  // ---------- GROUPS TAB ----------
+  // ---------- GROUPS TAB(保留給未來真好友/群組系統,尚未開放) ----------
   function renderGroupsTab() {
     var frag = document.createDocumentFragment();
 
-    frag.appendChild(el("div", { class: "excludeNote" }, "💡 這裡是你自己的家人偏好小抄,純粹備忘用,不能拿來建群組或發通知——沒有帳號、不用登入,小孩、長輩都能記。"));
+    frag.appendChild(el("div", { class: "excludeNote" }, "💡 這個分頁保留給未來的真好友/真群組系統——好友要互相加(雙向確認的真實關係),群組成員都是真人,協作場次才能真的發通知。需要帳號系統才能使用。"));
 
-    var tagHead = el("div", { class: "pickerHead", style: "max-width:560px;width:100%;margin-top:12px" });
-    tagHead.appendChild(el("div", { class: "phTitle mono" }, "家人"));
-    var addTagBtn = el("button", { class: "ghostBtn" }, "＋ 新增家人");
-    addTagBtn.onclick = function () { openAddPersonModal(null); };
-    tagHead.appendChild(addTagBtn);
-    frag.appendChild(tagHead);
+    var friendCard = el("div", { class: "card", style: "margin-top:12px" });
+    var friendRow = el("div", { class: "moreRow", style: "opacity:0.6" }, "<span class='mrLabel'>🔒 加好友 <span class='comingSoon'>尚未開放</span></span><span class='mrArrow'>›</span>");
+    friendRow.onclick = function () { showToast("需要帳號系統才能加好友"); };
+    friendCard.appendChild(friendRow);
+    var buildGroupRow = el("div", { class: "moreRow", style: "opacity:0.6" }, "<span class='mrLabel'>🔒 建立群組 <span class='comingSoon'>尚未開放</span></span><span class='mrArrow'>›</span>");
+    buildGroupRow.onclick = function () { showToast("需要先有好友才能建立群組"); };
+    friendCard.appendChild(buildGroupRow);
+    frag.appendChild(friendCard);
 
-    var tagListWrap = el("div", { class: "card" });
-    if (state.people.length === 0) tagListWrap.appendChild(el("div", { class: "emptyList" }, "還沒有家人,點上面「＋新增家人」新增第一個"));
-    state.people.forEach(function (p) {
-      var row = el("div", { class: "row" });
-      var main = el("div", { class: "rowMain" });
-      main.appendChild(el("div", { class: "rowName" }, "<span class='dot' style='background:" + p.color + "'>" + initials(p.name) + "</span> " + escapeHtml(p.name)));
-      if (p.prefs && p.prefs.length) {
-        var prefWrap = el("div", { class: "rowWho" });
-        p.prefs.forEach(function (pr) { prefWrap.appendChild(el("span", { class: "prefTag" }, escapeHtml(pr))); });
-        main.appendChild(prefWrap);
-      }
-      row.appendChild(main);
-      var editBtn = el("button", { class: "iconBtn" }, "✎");
-      editBtn.onclick = function () { openAddPersonModal(p); };
-      row.appendChild(editBtn);
-      var delBtn = el("button", { class: "iconBtn" }, "🗑");
-      delBtn.onclick = function () { deletePersonGlobally(p.id); };
-      row.appendChild(delBtn);
-      tagListWrap.appendChild(row);
-    });
-    frag.appendChild(tagListWrap);
-
-    frag.appendChild(el("div", { class: "sectionLabel mono", style: "margin-top:16px" }, "好友與群組"));
-    var friendRow = el("div", { class: "moreRow", style: "background:#20232B;border-radius:12px;opacity:0.6" }, "<span class='mrLabel'>🔒 加好友 / 建群組 <span class='comingSoon'>尚未開放</span></span><span class='mrArrow'>›</span>");
-    friendRow.onclick = function () { showToast("需要帳號系統才能加好友、建群組,原型階段先留著位置"); };
-    frag.appendChild(friendRow);
-    frag.appendChild(el("div", { class: "excludeNote", style: "margin-top:8px" }, "以前用「成員標籤」模擬的假群組功能已經拿掉。之後接上真帳號,好友要互相加、群組成員都是真人,協作場次才能真的發通知。"));
+    frag.appendChild(el("div", { class: "excludeNote", style: "margin-top:10px" }, "想記錄家人的飲食偏好備忘(不需要帳號),請到「☰ 更多 → 👨‍👩‍👧 家人偏好小抄」。那是完全不同的功能,跟這裡的真好友/群組無關。"));
 
     return frag;
   }
@@ -1548,12 +1525,13 @@
 
   // ---------- MORE TAB ----------
   function renderMoreTab() {
+    if (state.moreSubScreen === "familyPrefs") return renderFamilyPrefsManage();
     if (state.moreSubScreen === "customTags") return renderCustomTagsManage();
     if (state.moreSubScreen === "customCategories") return renderCustomCategoriesManage();
     var frag = document.createDocumentFragment();
 
     var manageGroup = el("div", { class: "moreGroup" });
-    [["customTags", "🏷️ 自訂標籤管理"], ["customCategories", "🍜 食物類型管理"]].forEach(function (pair) {
+    [["familyPrefs", "👨‍👩‍👧 家人偏好小抄"], ["customTags", "🏷️ 自訂標籤管理"], ["customCategories", "🍜 食物類型管理"]].forEach(function (pair) {
       var mrow = el("div", { class: "moreRow" }, "<span class='mrLabel'>" + pair[1] + "</span><span class='mrArrow'>›</span>");
       mrow.onclick = function () { state.moreSubScreen = pair[0]; render(); };
       manageGroup.appendChild(mrow);
@@ -1582,6 +1560,33 @@
     });
     frag.appendChild(group);
     frag.appendChild(el("div", { class: "appMeta mono" }, "這餐吃什麼 · 原型版"));
+    return frag;
+  }
+
+  function renderFamilyPrefsManage() {
+    var frag = document.createDocumentFragment();
+    frag.appendChild(el("div", { class: "excludeNote" }, "💡 這是你自己的家人飲食偏好小抄,純粹備忘用,不是帳號或身份,也不會拿去發通知或組群組——沒有帳號、不用登入,小孩、長輩都能記。"));
+    var lw = el("div", { class: "card", style: "margin-top:12px" });
+    if (state.people.length === 0) lw.appendChild(el("div", { class: "emptyList" }, "還沒有家人,點右上角「＋」新增第一個"));
+    state.people.forEach(function (p) {
+      var row = el("div", { class: "row" });
+      var main = el("div", { class: "rowMain" });
+      main.appendChild(el("div", { class: "rowName" }, "<span class='dot' style='background:" + p.color + "'>" + initials(p.name) + "</span> " + escapeHtml(p.name)));
+      if (p.prefs && p.prefs.length) {
+        var prefWrap = el("div", { class: "rowWho" });
+        p.prefs.forEach(function (pr) { prefWrap.appendChild(el("span", { class: "prefTag" }, escapeHtml(pr))); });
+        main.appendChild(prefWrap);
+      }
+      row.appendChild(main);
+      var editBtn = el("button", { class: "iconBtn" }, "✎");
+      editBtn.onclick = function () { openAddPersonModal(p); };
+      row.appendChild(editBtn);
+      var delBtn = el("button", { class: "iconBtn" }, "🗑");
+      delBtn.onclick = function () { deletePersonGlobally(p.id); };
+      row.appendChild(delBtn);
+      lw.appendChild(row);
+    });
+    frag.appendChild(lw);
     return frag;
   }
 
