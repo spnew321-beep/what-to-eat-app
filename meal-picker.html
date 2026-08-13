@@ -280,13 +280,13 @@
     groupAddExistOpen: false,
 
     decMode: "抽籤",
-    pool: [], drawn: null, browseOpen: false, catState: {}, suggestCatExpanded: false, suggestion: null, spinning: false,
+    pool: [], drawn: null, browseOpen: false, spinTagFilter: null, catState: {}, suggestCatExpanded: false, suggestion: null, spinning: false,
 
     collab: {
       step: "chooseAudience", audienceType: null, audienceGroupId: null,
       decisionMode: "random", deadlineAt: null, deadlinePreset: null,
       participants: [], pool: [], votes: {}, winner: null, noResult: false, spinning: false,
-      adhocForm: { name: "", category: CATEGORIES[0] }, savedAsGroup: false, browseOpen: false,
+      adhocForm: { name: "", category: CATEGORIES[0] }, savedAsGroup: false, browseOpen: false, tagFilter: null,
       activeSubTab: "candidates"
     },
 
@@ -576,19 +576,6 @@
     else state.pool = state.pool.filter(function (x) { return x !== id; });
     render();
   }
-  function addCustomTagFavoritesToPool(tagName) {
-    var toAdd = state.restaurants.filter(function (r) { return (r.customTags || []).indexOf(tagName) !== -1; }).map(function (r) { return r.id; });
-    var setPool = {}; state.pool.forEach(function (id) { setPool[id] = true; });
-    var allIn = toAdd.every(function (id) { return setPool[id]; });
-    if (allIn) state.pool = state.pool.filter(function (id) { return toAdd.indexOf(id) === -1; });
-    else toAdd.forEach(function (id) { if (state.pool.indexOf(id) === -1) state.pool.push(id); });
-    render();
-  }
-  function customTagPoolActive(tagName) {
-    var favIds = state.restaurants.filter(function (r) { return (r.customTags || []).indexOf(tagName) !== -1; }).map(function (r) { return r.id; });
-    if (favIds.length === 0) return false;
-    return favIds.every(function (id) { return state.pool.indexOf(id) !== -1; });
-  }
   function poolRestaurants() {
     return state.pool.map(function (id) { return state.restaurants.filter(function (r) { return r.id === id; })[0]; }).filter(Boolean);
   }
@@ -770,7 +757,7 @@
       step: "chooseAudience", audienceType: null, audienceGroupId: null,
       decisionMode: "random", deadlineAt: null, deadlinePreset: null,
       participants: [], pool: [], votes: {}, winner: null, noResult: false, spinning: false,
-      adhocForm: { name: "", category: CATEGORIES[0] }, savedAsGroup: false, browseOpen: false,
+      adhocForm: { name: "", category: CATEGORIES[0] }, savedAsGroup: false, browseOpen: false, tagFilter: null,
       activeSubTab: "candidates"
     };
   }
@@ -823,9 +810,6 @@
   function collabToggleRestaurant(restaurantId) {
     collabToggleRestaurantNoRender(restaurantId);
     render();
-  }
-  function collabPoolHasRestaurant(restaurantId) {
-    return state.collab.pool.some(function (item) { return item.restaurantId === restaurantId; });
   }
   function collabAddAdhocCandidate() {
     var name = state.collab.adhocForm.name.trim();
@@ -1295,9 +1279,14 @@
 
     var mrow = el("div", { class: "poolMemberRow" });
     allCustomTagNames().forEach(function (name) {
-      var favCount = state.restaurants.filter(function (r) { return (r.customTags || []).indexOf(name) !== -1; }).length;
-      var chip = el("div", { class: "memberChip" + (customTagPoolActive(name) ? " active" : "") }, "<span>🏷️ " + escapeHtml(name) + "(" + favCount + ")</span>");
-      chip.onclick = function () { addCustomTagFavoritesToPool(name); };
+      var count = state.restaurants.filter(function (r) { return (r.customTags || []).indexOf(name) !== -1; }).length;
+      var active = state.spinTagFilter === name;
+      var chip = el("div", { class: "memberChip" + (active ? " active" : "") }, "<span>🏷️ " + escapeHtml(name) + "(" + count + ")</span>");
+      chip.onclick = function () {
+        state.spinTagFilter = active ? null : name;
+        if (state.spinTagFilter) state.browseOpen = true;
+        render();
+      };
       mrow.appendChild(chip);
     });
     card.appendChild(mrow);
@@ -1315,10 +1304,16 @@
     }
 
     var browseBtn = el("button", { class: "ghostBtn", style: "margin-top:12px" }, state.browseOpen ? "收合店家列表 ▲" : "顯示所有店家 ▾");
-    browseBtn.onclick = function () { state.browseOpen = !state.browseOpen; render(); };
+    browseBtn.onclick = function () { state.browseOpen = !state.browseOpen; if (!state.browseOpen) state.spinTagFilter = null; render(); };
     card.appendChild(browseBtn);
 
-    if (state.browseOpen) card.appendChild(renderPickList(state.restaurants, state.pool, togglePool));
+    if (state.browseOpen) {
+      var spinBrowseSource = state.spinTagFilter
+        ? state.restaurants.filter(function (r) { return (r.customTags || []).indexOf(state.spinTagFilter) !== -1; })
+        : state.restaurants;
+      if (state.spinTagFilter) card.appendChild(el("div", { class: "excludeNote" }, "篩選中:🏷️ " + escapeHtml(state.spinTagFilter) + " · 點下面清單逐一勾選加入候選"));
+      card.appendChild(renderPickList(spinBrowseSource, state.pool, togglePool));
+    }
 
     frag.appendChild(card);
 
@@ -1562,22 +1557,19 @@
     if (quickTagNames.length > 0) {
       var mrow = el("div", { class: "poolMemberRow" });
       quickTagNames.forEach(function (name) {
-        var favIds = state.restaurants.filter(function (r) { return (r.customTags || []).indexOf(name) !== -1; }).map(function (r) { return r.id; });
-        var allIn = favIds.length > 0 && favIds.every(collabPoolHasRestaurant);
-        var chip = el("div", { class: "memberChip" + (allIn ? " active" : "") }, "<span>🏷️ 加入「" + escapeHtml(name) + "」(" + favIds.length + ")</span>");
+        var count = state.restaurants.filter(function (r) { return (r.customTags || []).indexOf(name) !== -1; }).length;
+        var active = state.collab.tagFilter === name;
+        var chip = el("div", { class: "memberChip" + (active ? " active" : "") }, "<span>🏷️ " + escapeHtml(name) + "(" + count + ")</span>");
         chip.onclick = function () {
-          favIds.forEach(function (id) {
-            var has = collabPoolHasRestaurant(id);
-            if (allIn && has) collabToggleRestaurantNoRender(id);
-            else if (!allIn && !has) collabToggleRestaurantNoRender(id);
-          });
+          state.collab.tagFilter = active ? null : name;
+          if (state.collab.tagFilter) state.collab.browseOpen = true;
           render();
         };
         mrow.appendChild(chip);
       });
       card.appendChild(mrow);
     } else {
-      card.appendChild(el("div", { class: "excludeNote" }, "還沒有自訂標籤可以快速拉候選,直接從下面清單挑選,或臨時新增店家"));
+      card.appendChild(el("div", { class: "excludeNote" }, "還沒有自訂標籤可以篩選候選,直接從下面清單挑選,或臨時新增店家"));
     }
 
     if (state.collab.pool.length > 0) {
@@ -1629,11 +1621,15 @@
     card.appendChild(adhocWrap);
 
     var browseBtn = el("button", { class: "ghostBtn", style: "margin-top:12px" }, state.collab.browseOpen ? "收合店家列表 ▲" : "顯示所有店家 ▾");
-    browseBtn.onclick = function () { state.collab.browseOpen = !state.collab.browseOpen; render(); };
+    browseBtn.onclick = function () { state.collab.browseOpen = !state.collab.browseOpen; if (!state.collab.browseOpen) state.collab.tagFilter = null; render(); };
     card.appendChild(browseBtn);
     if (state.collab.browseOpen) {
       var linkedIds = state.collab.pool.filter(function (i) { return !i.isAdhoc; }).map(function (i) { return i.restaurantId; });
-      card.appendChild(renderPickList(state.restaurants, linkedIds, collabToggleRestaurant));
+      var collabBrowseSource = state.collab.tagFilter
+        ? state.restaurants.filter(function (r) { return (r.customTags || []).indexOf(state.collab.tagFilter) !== -1; })
+        : state.restaurants;
+      if (state.collab.tagFilter) card.appendChild(el("div", { class: "excludeNote" }, "篩選中:🏷️ " + escapeHtml(state.collab.tagFilter) + " · 點下面清單逐一勾選加入候選"));
+      card.appendChild(renderPickList(collabBrowseSource, linkedIds, collabToggleRestaurant));
     }
     wrap.appendChild(card);
     return wrap;
