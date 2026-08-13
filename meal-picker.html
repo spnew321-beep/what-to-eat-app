@@ -709,6 +709,11 @@
       activeSubTab: "candidates"
     };
   }
+  function collabCancelSession() {
+    if (!(window.confirm ? window.confirm("確定要取消這個協作場次嗎?目前的候選、表態都會清掉,不會產生任何結果。") : true)) return;
+    collabReset();
+    render();
+  }
   function collabChooseAdhoc() {
     state.collab.participants = [];
     state.collab.deadlineAt = state.collab.deadlineAt || collabDefaultDeadline();
@@ -1356,7 +1361,12 @@
     var totalMin = Math.floor(remain / 60000);
     var days = Math.floor(totalMin / 1440), hours = Math.floor((totalMin % 1440) / 60), mins = totalMin % 60;
     var remainStr = days > 0 ? (days + "天" + hours + "小時") : (hours > 0 ? (hours + "小時" + mins + "分") : (mins + "分鐘"));
-    frag.appendChild(el("div", { class: "sectionLabel mono" }, "距離截止 " + formatDeadlineDisplay(state.collab.deadlineAt) + " 還剩 " + remainStr));
+    var timeRow = el("div", { style: "display:flex;justify-content:space-between;align-items:center" });
+    timeRow.appendChild(el("div", { class: "sectionLabel mono", style: "margin:0" }, "距離截止 " + formatDeadlineDisplay(state.collab.deadlineAt) + " 還剩 " + remainStr));
+    var cancelBtn = el("button", { style: "background:none;border:none;color:#B23A2E;font-size:12px;cursor:pointer;padding:2px 4px;" }, "✕ 取消場次");
+    cancelBtn.onclick = collabCancelSession;
+    timeRow.appendChild(cancelBtn);
+    frag.appendChild(timeRow);
 
     var seg = el("div", { class: "segControl" });
     [["candidates", "候選 / 表態"], ["participants", "參與者(" + state.collab.participants.length + ")"]].forEach(function (pair) {
