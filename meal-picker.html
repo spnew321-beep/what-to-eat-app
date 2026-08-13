@@ -241,7 +241,6 @@
 (function () {
   var RKEY = "meal-picker:restaurants:v6";
   var PKEY = "meal-picker:people:v2";
-  var GKEY = "meal-picker:groups:v5";
   var HKEY = "meal-picker:history:v2";
   var CKEY = "meal-picker:customCategories:v1";
 
@@ -257,9 +256,6 @@
     { id: "p2", name: "爸爸", color: PERSON_COLORS[1], prefs: ["不吃牛"] },
     { id: "p3", name: "媽媽", color: PERSON_COLORS[2], prefs: ["愛吃飯","不吃辣"] }
   ];
-  var SEED_GROUPS = [
-    { id: "g-default", name: "家庭", personIds: ["p1", "p2", "p3"] }
-  ];
   var SEED_RESTAURANTS = [
     { id: "s1", name: "巷口滷味", category: "小吃", price: 1, note: "記得加辣", favorite: true, x: null, y: null, customTags: ["常去"], menuItems: [{ id: "m1", name: "綜合滷味", price: 80 }, { id: "m2", name: "豆干", price: 20 }], photos: [] },
     { id: "s2", name: "一風堂拉麵", category: "日式", price: 2, note: "", favorite: false, x: null, y: null, customTags: ["哥哥最愛"], menuItems: [], photos: [] },
@@ -267,7 +263,7 @@
   ];
 
   var state = {
-    restaurants: null, people: null, groups: null, history: null, customCategories: null,
+    restaurants: null, people: null, history: null, customCategories: null,
     tab: "地圖",
 
     openPinId: null,
@@ -276,24 +272,20 @@
     colCustomTagFilter: "全部",
     colFavOnly: false,
 
-    groupsSelectedId: null,
-    groupAddExistOpen: false,
-
     decMode: "抽籤",
     pool: [], drawn: null, browseOpen: false, spinTagFilter: null, catState: {}, suggestCatExpanded: false, suggestion: null, spinning: false,
 
     collab: {
-      step: "chooseAudience", audienceType: null, audienceGroupId: null,
+      step: "chooseAudience",
       decisionMode: "random", deadlineAt: null, deadlinePreset: null,
       participants: [], pool: [], votes: {}, winner: null, noResult: false, spinning: false,
-      adhocForm: { name: "", category: CATEGORIES[0] }, savedAsGroup: false, browseOpen: false, tagFilter: null,
+      adhocForm: { name: "", category: CATEGORIES[0] }, browseOpen: false, tagFilter: null,
       activeSubTab: "candidates"
     },
 
     showModal: false, modalType: "restaurant", pendingLoc: null,
     form: { name: "", category: CATEGORIES[0], price: 1, note: "", customTags: [], menuItems: [], photos: [] },
-    personForm: { id: null, name: "", color: PERSON_COLORS[0], prefs: [], groupContextId: null },
-    groupForm: { name: "" },
+    personForm: { id: null, name: "", color: PERSON_COLORS[0], prefs: [] },
     morePanelOpen: null,
     moreSubScreen: null,
 
@@ -316,7 +308,6 @@
     return String(s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; });
   }
   function personById(id) { return (state.people || []).filter(function (p) { return p.id === id; })[0]; }
-  function groupById(id) { return (state.groups || []).filter(function (g) { return g.id === id; })[0]; }
   function initials(name) { return name ? name.slice(0, 1) : "?"; }
   function showToast(msg) { state.toastMsg = msg; render(); setTimeout(function () { state.toastMsg = ""; render(); }, 2200); }
 
@@ -325,35 +316,30 @@
     if (!hasStorage) {
       state.restaurants = SEED_RESTAURANTS.slice();
       state.people = SEED_PEOPLE.slice();
-      state.groups = SEED_GROUPS.slice();
       state.history = [];
       state.customCategories = [];
       render();
       return;
     }
     (async function () {
-      var rRes = null, pRes = null, gRes = null, hRes = null, cRes = null;
+      var rRes = null, pRes = null, hRes = null, cRes = null;
       try { rRes = await window.storage.get(RKEY, false); } catch (e) { rRes = null; }
       try { pRes = await window.storage.get(PKEY, false); } catch (e) { pRes = null; }
-      try { gRes = await window.storage.get(GKEY, false); } catch (e) { gRes = null; }
       try { hRes = await window.storage.get(HKEY, false); } catch (e) { hRes = null; }
       try { cRes = await window.storage.get(CKEY, false); } catch (e) { cRes = null; }
 
       state.restaurants = (rRes && rRes.value) ? JSON.parse(rRes.value) : SEED_RESTAURANTS.slice();
       state.people = (pRes && pRes.value) ? JSON.parse(pRes.value) : SEED_PEOPLE.slice();
-      state.groups = (gRes && gRes.value) ? JSON.parse(gRes.value) : SEED_GROUPS.slice();
       state.history = (hRes && hRes.value) ? JSON.parse(hRes.value) : [];
       state.customCategories = (cRes && cRes.value) ? JSON.parse(cRes.value) : [];
 
       if (!rRes || !rRes.value) { try { await window.storage.set(RKEY, JSON.stringify(state.restaurants), false); } catch (e) {} }
       if (!pRes || !pRes.value) { try { await window.storage.set(PKEY, JSON.stringify(state.people), false); } catch (e) {} }
-      if (!gRes || !gRes.value) { try { await window.storage.set(GKEY, JSON.stringify(state.groups), false); } catch (e) {} }
 
       render();
     })().catch(function () {
       state.restaurants = SEED_RESTAURANTS.slice();
       state.people = SEED_PEOPLE.slice();
-      state.groups = SEED_GROUPS.slice();
       state.history = [];
       state.customCategories = [];
       render();
@@ -369,7 +355,6 @@
   }
   function persistRestaurants() { render(); if (hasStorage) (async function () { var ok = await safeStorageSet(RKEY, JSON.stringify(state.restaurants)); if (!ok) showToast("儲存失敗,請檢查網路後再試一次"); })(); }
   function persistPeople() { render(); if (hasStorage) (async function () { var ok = await safeStorageSet(PKEY, JSON.stringify(state.people)); if (!ok) showToast("儲存失敗,請檢查網路後再試一次"); })(); }
-  function persistGroups() { render(); if (hasStorage) (async function () { var ok = await safeStorageSet(GKEY, JSON.stringify(state.groups)); if (!ok) showToast("儲存失敗,請檢查網路後再試一次"); })(); }
   function persistHistory() { if (hasStorage) (async function () { await safeStorageSet(HKEY, JSON.stringify(state.history)); })(); }
   function persistCustomCategories() { render(); if (hasStorage) (async function () { var ok = await safeStorageSet(CKEY, JSON.stringify(state.customCategories)); if (!ok) showToast("儲存失敗,請檢查網路後再試一次"); })(); }
 
@@ -492,12 +477,12 @@
     persistRestaurants();
   }
 
-  // ---------- person ops ----------
-  function openAddPersonModal(groupContextId, existing) {
+  // ---------- person ops (家人偏好檔案,無帳號、不入群組) ----------
+  function openAddPersonModal(existing) {
     state.modalType = "person";
     state.personForm = existing
-      ? Object.assign({}, existing, { prefs: existing.prefs.slice(), groupContextId: groupContextId })
-      : { id: null, name: "", color: PERSON_COLORS[(state.people || []).length % PERSON_COLORS.length], prefs: [], groupContextId: groupContextId };
+      ? Object.assign({}, existing, { prefs: existing.prefs.slice() })
+      : { id: null, name: "", color: PERSON_COLORS[(state.people || []).length % PERSON_COLORS.length], prefs: [] };
     state.showModal = true;
     render();
   }
@@ -505,55 +490,18 @@
     if (!state.personForm.name.trim()) return;
     if (state.personForm.id) {
       state.people = state.people.map(function (p) { return p.id === state.personForm.id ? Object.assign({}, p, { name: state.personForm.name.trim(), color: state.personForm.color, prefs: state.personForm.prefs }) : p; });
-      persistPeople();
     } else {
       var newPerson = { id: uid(), name: state.personForm.name.trim(), color: state.personForm.color, prefs: state.personForm.prefs };
       state.people = state.people.concat([newPerson]);
-      var gid = state.personForm.groupContextId;
-      if (gid) {
-        state.groups = state.groups.map(function (g) { return g.id === gid ? Object.assign({}, g, { personIds: g.personIds.concat([newPerson.id]) }) : g; });
-        persistGroups();
-      }
-      persistPeople();
     }
+    persistPeople();
     state.showModal = false;
     render();
-  }
-  function removePersonFromGroup(groupId, personId) {
-    state.groups = state.groups.map(function (g) { return g.id === groupId ? Object.assign({}, g, { personIds: g.personIds.filter(function (id) { return id !== personId; }) }) : g; });
-    persistGroups();
   }
   function deletePersonGlobally(personId) {
-    if (!(window.confirm ? window.confirm("確定要完全刪除這個成員標籤嗎?會從所有群組移除。") : true)) return;
+    if (!(window.confirm ? window.confirm("確定要刪除這個家人嗎?") : true)) return;
     state.people = state.people.filter(function (p) { return p.id !== personId; });
-    state.groups = state.groups.map(function (g) { return Object.assign({}, g, { personIds: g.personIds.filter(function (id) { return id !== personId; }) }); });
-    persistGroups(); persistPeople();
-  }
-  function addExistingPersonToGroup(groupId, personId) {
-    state.groups = state.groups.map(function (g) { return g.id === groupId ? Object.assign({}, g, { personIds: g.personIds.indexOf(personId) === -1 ? g.personIds.concat([personId]) : g.personIds }) : g; });
-    persistGroups();
-  }
-
-  // ---------- group ops ----------
-  function openAddGroupModal() {
-    state.modalType = "group";
-    state.groupForm = { name: "" };
-    state.showModal = true;
-    render();
-  }
-  function submitGroupForm() {
-    if (!state.groupForm.name.trim()) return;
-    var g = { id: uid(), name: state.groupForm.name.trim(), personIds: [] };
-    state.groups = state.groups.concat([g]);
-    state.showModal = false;
-    state.groupsSelectedId = g.id;
-    persistGroups();
-  }
-  function deleteGroup(id) {
-    if (!(window.confirm ? window.confirm("確定要刪除這個群組嗎?群組內的人不會被刪除,只是移除這個群組。") : true)) return;
-    state.groups = state.groups.filter(function (g) { return g.id !== id; });
-    if (state.groupsSelectedId === id) state.groupsSelectedId = null;
-    persistGroups();
+    persistPeople();
   }
 
   // ---------- decision history ----------
@@ -754,26 +702,14 @@
   function collabReset() {
     if (collabTimerHandle) { clearInterval(collabTimerHandle); collabTimerHandle = null; }
     state.collab = {
-      step: "chooseAudience", audienceType: null, audienceGroupId: null,
+      step: "chooseAudience",
       decisionMode: "random", deadlineAt: null, deadlinePreset: null,
       participants: [], pool: [], votes: {}, winner: null, noResult: false, spinning: false,
-      adhocForm: { name: "", category: CATEGORIES[0] }, savedAsGroup: false, browseOpen: false, tagFilter: null,
+      adhocForm: { name: "", category: CATEGORIES[0] }, browseOpen: false, tagFilter: null,
       activeSubTab: "candidates"
     };
   }
-  function collabChooseGroup(groupId) {
-    var g = groupById(groupId);
-    if (!g) return;
-    state.collab.audienceType = "group";
-    state.collab.audienceGroupId = groupId;
-    state.collab.participants = [];
-    state.collab.deadlineAt = state.collab.deadlineAt || collabDefaultDeadline();
-    state.collab.step = "setup";
-    render();
-  }
   function collabChooseAdhoc() {
-    state.collab.audienceType = "adhoc";
-    state.collab.audienceGroupId = null;
     state.collab.participants = [];
     state.collab.deadlineAt = state.collab.deadlineAt || collabDefaultDeadline();
     state.collab.step = "setup";
@@ -881,24 +817,11 @@
     }
     render();
   }
-  function collabSaveParticipantsAsGroup() {
-    if (state.collab.participants.length === 0) { showToast("目前沒有參與者可以存"); return; }
-    var newPeople = state.collab.participants.map(function (p) {
-      return { id: uid(), name: p.name, color: p.color, prefs: [] };
-    });
-    state.people = state.people.concat(newPeople);
-    var newGroup = { id: uid(), name: "協作場次 " + new Date().toLocaleDateString("zh-TW"), personIds: newPeople.map(function (p) { return p.id; }) };
-    state.groups = state.groups.concat([newGroup]);
-    state.collab.savedAsGroup = true;
-    persistPeople(); persistGroups();
-    showToast("已存成新群組「" + newGroup.name + "」");
-  }
-
   // ---------- render root ----------
   function render() {
     var app = document.getElementById("app");
     app.innerHTML = "";
-    if (state.restaurants === null || state.people === null || state.groups === null || state.customCategories === null) {
+    if (state.restaurants === null || state.people === null || state.customCategories === null) {
       app.appendChild(el("div", { style: "min-height:100vh;display:flex;align-items:center;justify-content:center;color:#F3ECDD;" }, "載入中…"));
       return;
     }
@@ -906,11 +829,7 @@
 
     var header = el("div", { class: "header" });
     var headerLeft = el("div", { class: "headerLeft" });
-    if (state.tab === "群組" && state.groupsSelectedId) {
-      var backBtn = el("button", { class: "backBtn" }, "←");
-      backBtn.onclick = function () { state.groupsSelectedId = null; render(); };
-      headerLeft.appendChild(backBtn);
-    } else if (state.tab === "更多" && state.moreSubScreen) {
+    if (state.tab === "更多" && state.moreSubScreen) {
       var backBtn2 = el("button", { class: "backBtn" }, "←");
       backBtn2.onclick = function () { state.moreSubScreen = null; render(); };
       headerLeft.appendChild(backBtn2);
@@ -922,14 +841,10 @@
       var addBtn = el("button", { class: "addBtn" }, "＋");
       addBtn.onclick = function () { openRestaurantModal(null, null); };
       header.appendChild(addBtn);
-    } else if (state.tab === "群組" && state.groupsSelectedId) {
+    } else if (state.tab === "家人") {
       var addMBtn = el("button", { class: "addBtn" }, "＋");
-      addMBtn.onclick = function () { openAddPersonModal(state.groupsSelectedId, null); };
+      addMBtn.onclick = function () { openAddPersonModal(null); };
       header.appendChild(addMBtn);
-    } else if (state.tab === "群組" && !state.groupsSelectedId) {
-      var addGBtn = el("button", { class: "addBtn" }, "＋");
-      addGBtn.onclick = openAddGroupModal;
-      header.appendChild(addGBtn);
     } else if (state.tab === "更多" && state.moreSubScreen === "customCategories") {
       var addCatMBtn = el("button", { class: "addBtn" }, "＋");
       addCatMBtn.onclick = addCustomCategory;
@@ -939,7 +854,7 @@
 
     if (state.tab === "地圖") wrap.appendChild(renderMapTab());
     else if (state.tab === "收藏") wrap.appendChild(renderCollectionTab());
-    else if (state.tab === "群組") wrap.appendChild(renderGroupsTab());
+    else if (state.tab === "家人") wrap.appendChild(renderGroupsTab());
     else if (state.tab === "決策") wrap.appendChild(renderDecisionTab());
     else wrap.appendChild(renderMoreTab());
 
@@ -958,13 +873,7 @@
 
   function headerSubtitle() {
     if (state.tab === "地圖" || state.tab === "收藏") return "我的收藏 · " + state.restaurants.length + " 間";
-    if (state.tab === "群組") {
-      if (state.groupsSelectedId) {
-        var g = groupById(state.groupsSelectedId);
-        return g ? (escapeHtml(g.name) + " · " + g.personIds.length + " 人") : "群組";
-      }
-      return "群組 · " + state.groups.length + " 個";
-    }
+    if (state.tab === "家人") return "家人 · " + state.people.length + " 位";
     if (state.tab === "決策") return "決策";
     if (state.tab === "更多") {
       if (state.moreSubScreen === "customTags") return "自訂標籤管理";
@@ -976,7 +885,7 @@
 
   function renderTabbar() {
     var bar = el("div", { class: "tabbar" });
-    [["地圖","🗺️"],["收藏","⭐"],["群組","👥"],["決策","🎯"],["更多","☰"]].forEach(function (pair) {
+    [["地圖","🗺️"],["收藏","⭐"],["家人","👥"],["決策","🎯"],["更多","☰"]].forEach(function (pair) {
       var name = pair[0], icon = pair[1];
       var b = el("button", { class: "tabBtn" + (state.tab === name ? " active" : "") }, "<span class='ic'>" + icon + "</span><span>" + name + "</span>");
       b.onclick = function () { state.tab = name; state.openPinId = null; render(); };
@@ -1119,24 +1028,31 @@
 
   // ---------- GROUPS TAB ----------
   function renderGroupsTab() {
-    if (state.groupsSelectedId) return renderGroupDetail(state.groupsSelectedId);
     var frag = document.createDocumentFragment();
 
-    var tagHead = el("div", { class: "pickerHead", style: "max-width:560px;width:100%" });
-    tagHead.appendChild(el("div", { class: "phTitle mono" }, "所有成員標籤"));
-    var addTagBtn = el("button", { class: "ghostBtn" }, "＋ 新增成員標籤");
-    addTagBtn.onclick = function () { openAddPersonModal(null, null); };
+    frag.appendChild(el("div", { class: "excludeNote" }, "💡 這裡是你自己的家人偏好小抄,純粹備忘用,不能拿來建群組或發通知——沒有帳號、不用登入,小孩、長輩都能記。"));
+
+    var tagHead = el("div", { class: "pickerHead", style: "max-width:560px;width:100%;margin-top:12px" });
+    tagHead.appendChild(el("div", { class: "phTitle mono" }, "家人"));
+    var addTagBtn = el("button", { class: "ghostBtn" }, "＋ 新增家人");
+    addTagBtn.onclick = function () { openAddPersonModal(null); };
     tagHead.appendChild(addTagBtn);
     frag.appendChild(tagHead);
 
     var tagListWrap = el("div", { class: "card" });
-    if (state.people.length === 0) tagListWrap.appendChild(el("div", { class: "emptyList" }, "還沒有成員標籤,點上面「＋新增成員標籤」新增第一個"));
+    if (state.people.length === 0) tagListWrap.appendChild(el("div", { class: "emptyList" }, "還沒有家人,點上面「＋新增家人」新增第一個"));
     state.people.forEach(function (p) {
       var row = el("div", { class: "row" });
-      var main = el("div", { class: "rowMain" }, "<span class='dot' style='background:" + p.color + "'>" + initials(p.name) + "</span> " + escapeHtml(p.name));
+      var main = el("div", { class: "rowMain" });
+      main.appendChild(el("div", { class: "rowName" }, "<span class='dot' style='background:" + p.color + "'>" + initials(p.name) + "</span> " + escapeHtml(p.name)));
+      if (p.prefs && p.prefs.length) {
+        var prefWrap = el("div", { class: "rowWho" });
+        p.prefs.forEach(function (pr) { prefWrap.appendChild(el("span", { class: "prefTag" }, escapeHtml(pr))); });
+        main.appendChild(prefWrap);
+      }
       row.appendChild(main);
       var editBtn = el("button", { class: "iconBtn" }, "✎");
-      editBtn.onclick = function () { openAddPersonModal(null, p); };
+      editBtn.onclick = function () { openAddPersonModal(p); };
       row.appendChild(editBtn);
       var delBtn = el("button", { class: "iconBtn" }, "🗑");
       delBtn.onclick = function () { deletePersonGlobally(p.id); };
@@ -1145,74 +1061,11 @@
     });
     frag.appendChild(tagListWrap);
 
-    var groupHead = el("div", { class: "sectionLabel mono", style: "margin-top:16px" }, "群組");
-    frag.appendChild(groupHead);
-    var lw = el("div", { class: "card" });
-    if (state.groups.length === 0) lw.appendChild(el("div", { class: "emptyList" }, "還沒有群組,點右上角「＋」新增"));
-    state.groups.forEach(function (g) {
-      var row = el("div", { class: "groupListRow" });
-      row.appendChild(el("div", { class: "gName" }, escapeHtml(g.name)));
-      row.appendChild(el("div", { class: "gCount mono" }, g.personIds.length + " 人"));
-      row.appendChild(el("div", { class: "arrow" }, "›"));
-      row.onclick = function () { state.groupsSelectedId = g.id; render(); };
-      lw.appendChild(row);
-    });
-    frag.appendChild(lw);
-    return frag;
-  }
-  function renderGroupDetail(groupId) {
-    var g = groupById(groupId);
-    var frag = document.createDocumentFragment();
-    if (!g) { frag.appendChild(el("div", { class: "emptyList" }, "找不到這個群組")); return frag; }
-
-    var lw = el("div", { class: "card" });
-    var members = g.personIds.map(personById).filter(Boolean);
-    if (members.length === 0) lw.appendChild(el("div", { class: "emptyList" }, "這個群組還沒有成員標籤,點右上角「＋」新增"));
-    members.forEach(function (p) {
-      var card = el("div", { class: "memberCard" });
-      var head = el("div", { class: "memberHead" });
-      head.appendChild(el("div", { class: "avatar", style: "background:" + p.color }, initials(p.name)));
-      head.appendChild(el("div", { class: "memberName" }, escapeHtml(p.name)));
-            var editBtn = el("button", { class: "iconBtn" }, "✎");
-      editBtn.onclick = function () { openAddPersonModal(groupId, p); };
-      head.appendChild(editBtn);
-      card.appendChild(head);
-      var tags = el("div", { class: "prefTags" });
-      (p.prefs || []).forEach(function (pr) { tags.appendChild(el("span", { class: "prefTag" }, escapeHtml(pr))); });
-      card.appendChild(tags);
-      var memberActions = el("div", { style: "display:flex;gap:8px;margin-top:10px" });
-      var rmBtn = el("button", { class: "ghostBtn" }, "移出此群組");
-      rmBtn.onclick = function () { removePersonFromGroup(groupId, p.id); };
-      var delBtn = el("button", { class: "ghostBtn", style: "color:#B23A2E;border-color:#B23A2E" }, "完全刪除");
-      delBtn.onclick = function () { deletePersonGlobally(p.id); };
-      memberActions.appendChild(rmBtn); memberActions.appendChild(delBtn);
-      card.appendChild(memberActions);
-      lw.appendChild(card);
-    });
-    frag.appendChild(lw);
-
-    var others = state.people.filter(function (p) { return g.personIds.indexOf(p.id) === -1; });
-    if (others.length > 0) {
-      var addExistBtn = el("button", { class: "browseToggle" }, state.groupAddExistOpen ? "從其他成員標籤中加入既有的 ▲" : "從其他成員標籤中加入既有的 ▾");
-      addExistBtn.onclick = function () { state.groupAddExistOpen = !state.groupAddExistOpen; render(); };
-      frag.appendChild(addExistBtn);
-      if (state.groupAddExistOpen) {
-        var listWrap = el("div", { class: "browseList" });
-        others.forEach(function (p) {
-          var row = el("div", { class: "browseRow" });
-          row.appendChild(el("span", {}, escapeHtml(p.name)));
-          var addBtn = el("button", { class: "ghostBtn", style: "margin-left:auto" }, "加入");
-          addBtn.onclick = function () { addExistingPersonToGroup(groupId, p.id); };
-          row.appendChild(addBtn);
-          listWrap.appendChild(row);
-        });
-        frag.appendChild(listWrap);
-      }
-    }
-
-    var delGroupBtn = el("button", { class: "ghostBtn", style: "display:block;margin:20px auto 0;color:#B23A2E;border-color:#B23A2E" }, "🗑 刪除這個群組");
-    delGroupBtn.onclick = function () { deleteGroup(groupId); };
-    frag.appendChild(delGroupBtn);
+    frag.appendChild(el("div", { class: "sectionLabel mono", style: "margin-top:16px" }, "好友與群組"));
+    var friendRow = el("div", { class: "moreRow", style: "background:#20232B;border-radius:12px;opacity:0.6" }, "<span class='mrLabel'>🔒 加好友 / 建群組 <span class='comingSoon'>尚未開放</span></span><span class='mrArrow'>›</span>");
+    friendRow.onclick = function () { showToast("需要帳號系統才能加好友、建群組,原型階段先留著位置"); };
+    frag.appendChild(friendRow);
+    frag.appendChild(el("div", { class: "excludeNote", style: "margin-top:8px" }, "以前用「成員標籤」模擬的假群組功能已經拿掉。之後接上真帳號,好友要互相加、群組成員都是真人,協作場次才能真的發通知。"));
 
     return frag;
   }
@@ -1442,15 +1295,10 @@
   function renderCollabChooseAudience() {
     var frag = document.createDocumentFragment();
     frag.appendChild(el("div", { class: "sectionLabel mono" }, "這次要找誰一起決定?"));
-    frag.appendChild(el("div", { class: "excludeNote" }, "選群組會把這個群組的人設為這次決策的邀請/通知對象(原型階段還沒接真帳號,無法真的發送通知);真正會加入場次、按完成的還是點連結進來的人,候選店家請用下面的自訂標籤或瀏覽清單自己湊"));
-    if (state.groups.length > 0) {
-      state.groups.forEach(function (g) {
-        var b = el("button", { class: "bigChoiceBtn" }, "<span class='bcTitle'>👥 " + escapeHtml(g.name) + "</span><span class='bcDesc'>已存的群組 · " + g.personIds.length + " 人</span>");
-        b.onclick = function () { collabChooseGroup(g.id); };
-        frag.appendChild(b);
-      });
-    }
-    var adhocBtn = el("button", { class: "bigChoiceBtn" }, "<span class='bcTitle'>🔗 自由邀請</span><span class='bcDesc'>不指定群組,用連結臨時邀請大家加入</span>");
+    var lockedBtn = el("button", { class: "bigChoiceBtn", style: "opacity:0.5" }, "<span class='bcTitle'>🔒 選好友群組</span><span class='bcDesc'>尚未開放,需要帳號系統才能加好友、建群組</span>");
+    lockedBtn.onclick = function () { showToast("需要帳號系統才能加好友、選好友群組"); };
+    frag.appendChild(lockedBtn);
+    var adhocBtn = el("button", { class: "bigChoiceBtn" }, "<span class='bcTitle'>🔗 自由邀請</span><span class='bcDesc'>用連結臨時邀請大家加入,不需要好友或帳號</span>");
     adhocBtn.onclick = collabChooseAdhoc;
     frag.appendChild(adhocBtn);
     return frag;
@@ -1686,13 +1534,10 @@
       }
     }
 
-    if (state.collab.participants.length > 0 && !state.collab.savedAsGroup) {
-      var saveBtn = el("button", { class: "ghostBtn", style: "display:block;margin:14px auto 0;" }, "💾 把這次的人存成新群組");
-      saveBtn.onclick = collabSaveParticipantsAsGroup;
+    if (state.collab.participants.length > 0) {
+      var saveBtn = el("button", { class: "ghostBtn", style: "display:block;margin:14px auto 0;opacity:0.5" }, "🔒 加為好友(尚未開放)");
+      saveBtn.onclick = function () { showToast("需要帳號系統才能加好友"); };
       frag.appendChild(saveBtn);
-    }
-    if (state.collab.savedAsGroup) {
-      frag.appendChild(el("div", { class: "excludeNote", style: "text-align:center" }, "✅ 已存成新群組,可以到「群組」分頁看到"));
     }
 
     var resetBtn = el("button", { class: "ghostBtn", style: "display:block;margin:16px auto 0;" }, "🔄 開始新的協作場次");
@@ -1967,13 +1812,13 @@
       modal.appendChild(addCatBtn2);
 
     } else if (state.modalType === "person") {
-      var phead = el("div", { class: "modalHead" }, "<span>" + (state.personForm.id ? "編輯成員標籤" : "新增成員標籤") + "</span>");
+      var phead = el("div", { class: "modalHead" }, "<span>" + (state.personForm.id ? "編輯家人" : "新增家人") + "</span>");
       var pclose = el("button", {}, "✕");
       pclose.onclick = function () { state.showModal = false; render(); };
       phead.appendChild(pclose);
       modal.appendChild(phead);
 
-      modal.appendChild(el("div", { class: "excludeNote", style: "margin-bottom:14px" }, "💡 這是你自己的備忘標籤,幫店家標記「這可能是誰喜歡的」,不是真的帳號或身份。"));
+      modal.appendChild(el("div", { class: "excludeNote", style: "margin-bottom:14px" }, "💡 這是你自己記錄的家人飲食偏好小抄,不是帳號或身份,也不會拿去發通知。"));
 
       var pf1 = el("div", { class: "field" });
       pf1.appendChild(el("label", {}, "稱呼"));
@@ -2010,28 +1855,10 @@
       pf3.appendChild(prefRow);
       modal.appendChild(pf3);
 
-      var psubmitRef = el("button", { class: "submitBtn" }, state.personForm.id ? "儲存變更" : (state.personForm.groupContextId ? "加入群組" : "新增成員標籤"));
+      var psubmitRef = el("button", { class: "submitBtn" }, state.personForm.id ? "儲存變更" : "新增家人");
       psubmitRef.disabled = !state.personForm.name.trim();
       psubmitRef.onclick = submitPersonForm;
       modal.appendChild(psubmitRef);
-
-    } else {
-      var ghead = el("div", { class: "modalHead" }, "<span>新增群組</span>");
-      var gclose = el("button", {}, "✕");
-      gclose.onclick = function () { state.showModal = false; render(); };
-      ghead.appendChild(gclose);
-      modal.appendChild(ghead);
-      var gf1 = el("div", { class: "field" });
-      gf1.appendChild(el("label", {}, "群組名稱"));
-      var gNameInput = el("input", { placeholder: "例如:同事 / 大學同學" });
-      gNameInput.value = state.groupForm.name;
-      gNameInput.oninput = function (e) { state.groupForm.name = e.target.value; gsubmitRef.disabled = !state.groupForm.name.trim(); };
-      gf1.appendChild(gNameInput);
-      modal.appendChild(gf1);
-      var gsubmitRef = el("button", { class: "submitBtn" }, "建立群組");
-      gsubmitRef.disabled = !state.groupForm.name.trim();
-      gsubmitRef.onclick = submitGroupForm;
-      modal.appendChild(gsubmitRef);
     }
 
     bg.appendChild(modal);
