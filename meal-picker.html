@@ -279,7 +279,7 @@
       audienceGroupId: null,
       participants: [], pool: [], votes: {}, winner: null, noResult: false, spinning: false,
       adhocForm: { name: "", category: CATEGORIES[0] }, browseOpen: false, tagFilter: null,
-      activeSubTab: "candidates"
+      activeSubTab: "candidates", sessionId: null
     },
 
     groupDetailId: null,
@@ -1134,13 +1134,19 @@
       audienceGroupId: null,
       participants: [], pool: [], votes: {}, winner: null, noResult: false, spinning: false,
       adhocForm: { name: "", category: CATEGORIES[0] }, browseOpen: false, tagFilter: null,
-      activeSubTab: "candidates"
+      activeSubTab: "candidates", sessionId: null
     };
   }
   function collabCancelSession() {
     showConfirm("確定要取消這個協作場次嗎?目前的候選、表態都會清掉,不會產生任何結果。", function () {
+      var sid = state.collab.sessionId;
       collabReset();
       render();
+      if (sid) {
+        sb.from('decision_sessions').delete().eq('id', sid).then(function (res) {
+          if (res.error) showToast("場次紀錄清除失敗(不影響取消)");
+        });
+      }
     }, "取消場次");
   }
   function collabChooseAdhoc() {
@@ -1171,6 +1177,16 @@
     render();
     if (collabTimerHandle) clearInterval(collabTimerHandle);
     collabTimerHandle = setInterval(collabActiveTick, 1000);
+    sb.from('decision_sessions').insert({
+      owner_user_id: state.session.user.id,
+      group_id: state.collab.audienceGroupId,
+      decision_mode: state.collab.decisionMode,
+      deadline_at: new Date(state.collab.deadlineAt).toISOString(),
+      status: 'collecting'
+    }).select().then(function (res) {
+      if (res.error || !res.data || !res.data[0]) { showToast("場次紀錄儲存失敗(不影響繼續操作)"); return; }
+      state.collab.sessionId = res.data[0].id;
+    });
   }
   function collabActiveTick() {
     if (state.collab.step !== "active") { clearInterval(collabTimerHandle); collabTimerHandle = null; return; }
@@ -1231,6 +1247,11 @@
       state.collab.noResult = true;
       state.collab.winner = null;
       render();
+      if (state.collab.sessionId) {
+        sb.from('decision_sessions').update({ status: 'no_result' }).eq('id', state.collab.sessionId).then(function (res) {
+          if (res.error) showToast("場次紀錄更新失敗");
+        });
+      }
       return;
     }
     var accepted = pool.filter(function (item) { var v = state.collab.votes[item.id]; return !v || v.reject === 0; });
@@ -1261,6 +1282,14 @@
       if (r) recordDecision(r);
     } else {
       recordDecision({ name: item.name, category: item.category });
+    }
+    if (state.collab.sessionId) {
+      sb.from('decision_sessions').update({
+        status: 'done',
+        winner_restaurant_id: item.isAdhoc ? null : item.restaurantId
+      }).eq('id', state.collab.sessionId).then(function (res) {
+        if (res.error) showToast("場次紀錄更新失敗(不影響已產生的結果)");
+      });
     }
     render();
   }
