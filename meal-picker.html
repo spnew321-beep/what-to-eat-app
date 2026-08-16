@@ -252,9 +252,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
 (function () {
-  var HKEY = "meal-picker:history:v2";
-  var OKEY = "meal-picker:orders:v1";
-
   var CATEGORIES = ["中式","日式","韓式","西式","東南亞","小吃","早餐","飲料甜點"];
   var COMMON_CATEGORIES = ["中式","日式","韓式","西式","小吃"];
   var MORE_CATEGORIES = CATEGORIES.filter(function (c) { return COMMON_CATEGORIES.indexOf(c) === -1; });
@@ -310,7 +307,6 @@
     authLoading: false
   };
 
-  var hasStorage = typeof window !== "undefined" && !!window.storage;
   var ticketNo = Math.floor(Math.random() * 900) + 100;
   var collabTimerHandle = null;
 
@@ -500,6 +496,16 @@
   }
 
   // ---------- load / persist ----------
+  function mapDbOrder(o) {
+    return {
+      id: o.id, restaurantId: o.restaurant_id, restaurantName: o.restaurant_name || "", category: o.category || "",
+      mode: o.mode, groupId: o.group_id,
+      items: (o.order_items || []).map(function (it) {
+        return { id: it.id, memberId: it.member_id, personName: it.person_name, item: it.item || "", price: it.price != null ? it.price : "" };
+      }),
+      createdAt: new Date(o.created_at).getTime()
+    };
+  }
   function mapDbGroup(g) {
     return {
       id: g.id, name: g.name,
@@ -538,9 +544,17 @@
       state.customPrefs = cpRes.error ? [] : cpRes.data.map(function (p) { return { id: p.id, name: p.name }; });
       if (cpRes.error) showToast("讀取自訂飲食偏好失敗,請檢查網路後重新整理");
 
-      // 決策歷史/點餐還沒接上 Supabase(task #38-39),先維持原本的本地暫存
-      state.history = [];
-      state.orders = [];
+      var hRes = await sb.from('decision_history').select('*').order('decided_at', { ascending: false }).limit(20);
+      state.history = hRes.error ? [] : hRes.data.map(function (h) {
+        return { id: h.id, restaurantId: h.restaurant_id, name: h.restaurant_name, category: h.category, ts: new Date(h.decided_at).getTime() };
+      });
+      if (hRes.error) showToast("讀取決策紀錄失敗,請檢查網路後重新整理");
+
+      var oRes = await sb.from('orders').select('*, order_items(*)').order('created_at', { ascending: false });
+      state.orders = oRes.error ? [] : oRes.data.map(mapDbOrder);
+      if (oRes.error) showToast("讀取點餐資料失敗,請檢查網路後重新整理");
+
+      // 決策場次(協作)還沒接上 Supabase(task #39),先維持原本的本地暫存
 
       render();
     })().catch(function () {
@@ -554,17 +568,6 @@
       render();
     });
   }
-  function wait(ms) { return new Promise(function (res) { setTimeout(res, ms); }); }
-  async function safeStorageSet(key, value) {
-    for (var attempt = 0; attempt < 2; attempt++) {
-      try { await window.storage.set(key, value, false); return true; }
-      catch (e) { if (attempt === 0) await wait(350); }
-    }
-    return false;
-  }
-  function persistHistory() { if (hasStorage) (async function () { await safeStorageSet(HKEY, JSON.stringify(state.history)); })(); }
-  function persistOrders() { render(); if (hasStorage) (async function () { var ok = await safeStorageSet(OKEY, JSON.stringify(state.orders)); if (!ok) showToast("儲存失敗,請檢查網路後再試一次"); })(); }
-
   // ---------- restaurant ops ----------
   function toggleFavorite(id) {
     var r = state.restaurants.filter(function (x) { return x.id === id; })[0];
@@ -932,9 +935,20 @@
 
   // ---------- decision history ----------
   function recordDecision(restaurant) {
-    var entry = { id: uid(), restaurantId: restaurant.id, name: restaurant.name, category: restaurant.category, ts: Date.now() };
+    var entry = { id: uid(), restaurantId: restaurant.id || null, name: restaurant.name, category: restaurant.category, ts: Date.now() };
     state.history = [entry].concat(state.history).slice(0, 20);
-    persistHistory();
+    render();
+    sb.from('decision_history').insert({
+      restaurant_id: restaurant.id || null,
+      restaurant_name: restaurant.name,
+      category: restaurant.category,
+      owner_user_id: state.session.user.id
+    }).select().then(function (res) {
+      if (res.error || !res.data || !res.data[0]) { showToast("決策紀錄儲存失敗,請檢查網路後再試一次"); return; }
+      entry.id = res.data[0].id;
+      entry.ts = new Date(res.data[0].decided_at).getTime();
+      render();
+    });
   }
   function recentCategories(limit) {
     var seen = [];
@@ -2108,24 +2122,47 @@
 
   // ---------- ORDERS (點餐) ----------
   function orderResetFlow() { state.orderFlow = { step: "list", restaurant: null, mode: null, pickSource: null, pendingGroupId: null }; }
-  function createOrder(mode, groupId) {
+  function syncOrderItem(it) {
+    sb.from('order_items').update({
+      person_name: it.personName,
+      item: it.item || null,
+      price: it.price === "" || it.price == null ? null : Number(it.price)
+    }).eq('id', it.id).then(function (res) {
+      if (res.error) showToast("儲存失敗,請檢查網路後再試一次");
+    });
+  }
+  async function createOrder(mode, groupId) {
     var r = state.orderFlow.restaurant;
+    var res = await sb.from('orders').insert({
+      restaurant_id: r ? r.id : null, restaurant_name: r ? r.name : "", category: r ? r.category : "",
+      mode: mode, group_id: groupId || null, owner_user_id: state.session.user.id
+    }).select();
+    if (res.error || !res.data || !res.data[0]) { showToast("建立點餐失敗,請檢查網路後再試一次"); return null; }
+    var row = res.data[0];
     var items = [];
     if (mode === "group" && groupId) {
       var g = groupById(groupId);
-      if (g) items = g.members.map(function (m) { return { id: uid(), memberId: m.id, personName: m.name, item: "", price: "" }; });
+      if (g && g.members.length) {
+        var itemsRes = await sb.from('order_items').insert(g.members.map(function (m) {
+          return { order_id: row.id, member_id: m.id, person_name: m.name };
+        })).select();
+        if (!itemsRes.error && itemsRes.data) {
+          items = itemsRes.data.map(function (it) { return { id: it.id, memberId: it.member_id, personName: it.person_name, item: it.item || "", price: it.price != null ? it.price : "" }; });
+        }
+      }
     }
     var order = {
-      id: uid(), restaurantId: r ? r.id : null, restaurantName: r ? r.name : "", category: r ? r.category : "",
-      mode: mode, groupId: groupId || null, items: items, createdAt: Date.now()
+      id: row.id, restaurantId: row.restaurant_id, restaurantName: row.restaurant_name || "", category: row.category || "",
+      mode: row.mode, groupId: row.group_id, items: items, createdAt: new Date(row.created_at).getTime()
     };
     state.orders = [order].concat(state.orders);
-    persistOrders();
+    render();
     return order;
   }
   function orderFlowSetRestaurant(r) { state.orderFlow.restaurant = r; state.orderFlow.step = "pickMode"; render(); }
-  function orderFlowPickManual() {
-    var order = createOrder("manual", null);
+  async function orderFlowPickManual() {
+    var order = await createOrder("manual", null);
+    if (!order) return;
     orderResetFlow();
     state.orderDetailId = order.id;
     render();
@@ -2142,8 +2179,9 @@
     state.orderFlow.step = "invite";
     render();
   }
-  function orderFlowContinueFromInvite() {
-    var order = createOrder(state.orderFlow.mode, state.orderFlow.pendingGroupId);
+  async function orderFlowContinueFromInvite() {
+    var order = await createOrder(state.orderFlow.mode, state.orderFlow.pendingGroupId);
+    if (!order) return;
     orderResetFlow();
     state.orderDetailId = order.id;
     render();
@@ -2152,7 +2190,10 @@
     showConfirm("確定要刪除這筆點餐嗎?", function () {
       state.orders = state.orders.filter(function (o) { return o.id !== id; });
       if (state.orderDetailId === id) { state.orderDetailId = null; state.orderGroupImportOpen = false; }
-      persistOrders();
+      render();
+      sb.from('orders').delete().eq('id', id).then(function (res) {
+        if (res.error) showToast("刪除失敗,請檢查網路後再試一次");
+      });
     }, "刪除");
   }
   function importGroupIntoOrder(orderId, groupId) {
@@ -2161,14 +2202,20 @@
     if (!o || !g) return;
     var existingMemberIds = o.items.map(function (it) { return it.memberId; }).filter(Boolean);
     var existingNames = o.items.filter(function (it) { return !it.memberId; }).map(function (it) { return it.personName; });
-    var newItems = g.members.filter(function (m) {
+    var toAdd = g.members.filter(function (m) {
       return existingMemberIds.indexOf(m.id) === -1 && existingNames.indexOf(m.name) === -1;
-    }).map(function (m) {
-      return { id: uid(), memberId: m.id, personName: m.name, item: "", price: "" };
     });
-    o.items = o.items.concat(newItems);
     state.orderGroupImportOpen = false;
-    persistOrders();
+    render();
+    if (toAdd.length === 0) return;
+    sb.from('order_items').insert(toAdd.map(function (m) {
+      return { order_id: orderId, member_id: m.id, person_name: m.name };
+    })).select().then(function (res) {
+      if (res.error || !res.data) { showToast("匯入成員失敗,請檢查網路後再試一次"); return; }
+      var newItems = res.data.map(function (it) { return { id: it.id, memberId: it.member_id, personName: it.person_name, item: it.item || "", price: it.price != null ? it.price : "" }; });
+      o.items = o.items.concat(newItems);
+      render();
+    });
   }
 
   function renderOrdersTab() {
@@ -2312,24 +2359,43 @@
       nameInput.style.cssText = "flex:0 0 84px;border:1px solid #C9BFA5;background:#FFFDF7;border-radius:8px;padding:8px 10px;font-size:14px;color:#232019;font-family:inherit;";
       nameInput.value = it.personName;
       nameInput.oninput = function (e) { it.personName = e.target.value; };
-      nameInput.onblur = function () { persistOrders(); };
+      nameInput.onblur = function () { render(); syncOrderItem(it); };
       var itemInput = el("input", { class: "miName", placeholder: "要點的東西" });
       itemInput.value = it.item;
       itemInput.oninput = function (e) { it.item = e.target.value; };
-      itemInput.onblur = function () { persistOrders(); };
+      itemInput.onblur = function () { render(); syncOrderItem(it); };
       var priceInput = el("input", { class: "miPrice", type: "number", placeholder: "價格" });
       priceInput.value = it.price === "" || it.price == null ? "" : it.price;
       priceInput.oninput = function (e) { it.price = e.target.value; };
-      priceInput.onblur = function () { persistOrders(); };
+      priceInput.onblur = function () { render(); syncOrderItem(it); };
       var rm = el("button", { class: "miRemove" }, "✕");
-      rm.onclick = function () { o.items = o.items.filter(function (x) { return x.id !== it.id; }); persistOrders(); };
+      rm.onclick = function () {
+        o.items = o.items.filter(function (x) { return x.id !== it.id; });
+        render();
+        sb.from('order_items').delete().eq('id', it.id).then(function (res) {
+          if (res.error) showToast("刪除失敗,請檢查網路後再試一次");
+        });
+      };
       row.appendChild(nameInput); row.appendChild(itemInput); row.appendChild(priceInput); row.appendChild(rm);
       itemsWrap.appendChild(row);
     });
     card.appendChild(itemsWrap);
 
     var addItemBtn = el("button", { class: "addRowBtn" }, "＋ 新增一筆");
-    addItemBtn.onclick = function () { o.items = o.items.concat([{ id: uid(), personName: "", item: "", price: "" }]); persistOrders(); };
+    addItemBtn.onclick = function () {
+      var tempItem = { id: uid(), personName: "", item: "", price: "" };
+      o.items = o.items.concat([tempItem]);
+      render();
+      sb.from('order_items').insert({ order_id: o.id, person_name: "" }).select().then(function (res) {
+        if (res.error || !res.data || !res.data[0]) {
+          showToast("新增失敗,請檢查網路後再試一次");
+          o.items = o.items.filter(function (x) { return x.id !== tempItem.id; });
+          render();
+          return;
+        }
+        tempItem.id = res.data[0].id;
+      });
+    };
     card.appendChild(addItemBtn);
 
     var importToggleBtn = el("button", { class: "ghostBtn", style: "margin-top:10px" }, state.orderGroupImportOpen ? "取消匯入" : "從群組匯入成員");
