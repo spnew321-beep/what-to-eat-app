@@ -740,25 +740,12 @@
     ctx.fillStyle = "#232019"; ctx.font = "bold 46px sans-serif";
     var nameBottom = cardY + 130;
     var used = wrapCjkText(ctx, restaurant.name, cardX + 36, nameBottom, cardW - 72, 54);
-    ctx.fillStyle = "#5C7A6B"; ctx.font = "20px monospace";
+    ctx.fillStyle = "#3E5A4A"; ctx.font = "20px monospace";
     var metaY = nameBottom + used - 54 + 70;
     ctx.fillText(restaurant.category + "  ・  " + priceLabel(restaurant.price), cardX + 36, metaY);
-    var tagY = metaY + 46;
-    if (restaurant.customTags && restaurant.customTags.length) {
-      var tx = cardX + 36;
-      restaurant.customTags.forEach(function (label2) {
-        ctx.font = "14px sans-serif";
-        var tw = ctx.measureText(label2).width + 24;
-        ctx.fillStyle = "#5C7A6B";
-        roundRectPath(ctx, tx, tagY, tw, 30, 15); ctx.fill();
-        ctx.fillStyle = "#F3ECDD"; ctx.textAlign = "left";
-        ctx.fillText(label2, tx + 12, tagY + 20);
-        tx += tw + 8;
-      });
-    }
     if (restaurant.note) {
-      ctx.fillStyle = "#6B6252"; ctx.font = "16px sans-serif";
-      wrapCjkText(ctx, restaurant.note, cardX + 36, tagY + 60, cardW - 72, 24);
+      ctx.fillStyle = "#4A4038"; ctx.font = "16px sans-serif";
+      wrapCjkText(ctx, restaurant.note, cardX + 36, metaY + 46, cardW - 72, 24);
     }
     var d = new Date();
     ctx.fillStyle = "#8F97A8"; ctx.font = "12px monospace"; ctx.textAlign = "center";
@@ -1396,25 +1383,21 @@
     if (state.drawn && !state.spinning) {
       var popupBg = el("div", { class: "dialogBg" });
       popupBg.onclick = function (e) { if (e.target === popupBg) { state.drawn = null; render(); } };
-      var popupInner = el("div", { style: "width:100%;max-width:380px;position:relative;" });
+      var popupInner = el("div", { style: "width:100%;max-width:380px;" });
       popupInner.onclick = function (e) { e.stopPropagation(); };
-      var closeBtn = el("button", { style: "position:absolute;top:-40px;right:0;background:none;border:none;color:#F3ECDD;font-size:26px;cursor:pointer;line-height:1;" }, "✕");
-      closeBtn.onclick = function () { state.drawn = null; render(); };
-      popupInner.appendChild(closeBtn);
       var t = el("div", { class: "ticket" });
+      var iconRow = el("div", { style: "position:absolute;top:14px;right:16px;display:flex;gap:14px;" });
+      var shareIconBtn = el("button", { style: "background:none;border:none;color:#8A6A2A;font-size:19px;cursor:pointer;padding:2px;line-height:1;" }, "↗");
+      shareIconBtn.onclick = function () { shareResultImage(state.drawn, "轉盤結果", "這餐就吃這間"); };
+      var closeIconBtn = el("button", { style: "background:none;border:none;color:#8A6A2A;font-size:19px;cursor:pointer;padding:2px;line-height:1;" }, "✕");
+      closeIconBtn.onclick = function () { state.drawn = null; render(); };
+      iconRow.appendChild(shareIconBtn); iconRow.appendChild(closeIconBtn);
+      t.appendChild(iconRow);
       t.appendChild(el("div", { class: "ticketTop mono" }, "<span>NO. " + ticketNo + "</span><span>轉盤結果</span>"));
       t.appendChild(el("div", { class: "ticketLabel" }, "這餐就吃這間"));
       t.appendChild(el("div", { class: "ticketName" }, escapeHtml(state.drawn.name)));
       t.appendChild(el("div", { class: "ticketMeta mono" }, escapeHtml(state.drawn.category) + " ・ " + priceLabel(state.drawn.price)));
-      if (state.drawn.customTags && state.drawn.customTags.length) {
-        var whoWrap = el("div", { class: "ticketWho" });
-        state.drawn.customTags.forEach(function (label2) {
-          whoWrap.appendChild(el("span", { class: "whoTag", style: "background:#5C7A6B" }, escapeHtml(label2)));
-        });
-        t.appendChild(whoWrap);
-      }
       popupInner.appendChild(t);
-      appendShareBtn(popupInner, state.drawn, "轉盤結果", "這餐就吃這間");
       popupBg.appendChild(popupInner);
       frag.appendChild(popupBg);
     }
