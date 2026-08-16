@@ -252,11 +252,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
 (function () {
-  var RKEY = "meal-picker:restaurants:v6";
   var HKEY = "meal-picker:history:v2";
-  var CKEY = "meal-picker:customCategories:v1";
   var OKEY = "meal-picker:orders:v1";
-  var CPKEY = "meal-picker:customPrefs:v1";
 
   var CATEGORIES = ["中式","日式","韓式","西式","東南亞","小吃","早餐","飲料甜點"];
   var COMMON_CATEGORIES = ["中式","日式","韓式","西式","小吃"];
@@ -533,20 +530,26 @@
       state.groups = gRes.error ? [] : gRes.data.map(mapDbGroup);
       if (gRes.error) showToast("讀取群組資料失敗,請檢查網路後重新整理");
 
-      // 自訂類型/自訂偏好/決策歷史/點餐還沒接上 Supabase(task #37-39),先維持原本的本地暫存
+      var ccRes = await sb.from('custom_categories').select('*').order('created_at', { ascending: true });
+      state.customCategories = ccRes.error ? [] : ccRes.data.map(function (c) { return { id: c.id, name: c.name }; });
+      if (ccRes.error) showToast("讀取自訂類型失敗,請檢查網路後重新整理");
+
+      var cpRes = await sb.from('custom_prefs').select('*').order('created_at', { ascending: true });
+      state.customPrefs = cpRes.error ? [] : cpRes.data.map(function (p) { return { id: p.id, name: p.name }; });
+      if (cpRes.error) showToast("讀取自訂飲食偏好失敗,請檢查網路後重新整理");
+
+      // 決策歷史/點餐還沒接上 Supabase(task #38-39),先維持原本的本地暫存
       state.history = [];
-      state.customCategories = [];
       state.orders = [];
-      state.customPrefs = [];
 
       render();
     })().catch(function () {
       state.restaurants = [];
       state.groups = [];
-      state.history = [];
       state.customCategories = [];
-      state.orders = [];
       state.customPrefs = [];
+      state.history = [];
+      state.orders = [];
       showToast("讀取資料失敗,請檢查網路後重新整理");
       render();
     });
@@ -559,11 +562,8 @@
     }
     return false;
   }
-  function persistRestaurants() { render(); if (hasStorage) (async function () { var ok = await safeStorageSet(RKEY, JSON.stringify(state.restaurants)); if (!ok) showToast("儲存失敗,請檢查網路後再試一次"); })(); }
   function persistHistory() { if (hasStorage) (async function () { await safeStorageSet(HKEY, JSON.stringify(state.history)); })(); }
-  function persistCustomCategories() { render(); if (hasStorage) (async function () { var ok = await safeStorageSet(CKEY, JSON.stringify(state.customCategories)); if (!ok) showToast("儲存失敗,請檢查網路後再試一次"); })(); }
   function persistOrders() { render(); if (hasStorage) (async function () { var ok = await safeStorageSet(OKEY, JSON.stringify(state.orders)); if (!ok) showToast("儲存失敗,請檢查網路後再試一次"); })(); }
-  function persistCustomPrefs() { render(); if (hasStorage) (async function () { var ok = await safeStorageSet(CPKEY, JSON.stringify(state.customPrefs)); if (!ok) showToast("儲存失敗,請檢查網路後再試一次"); })(); }
 
   // ---------- restaurant ops ----------
   function toggleFavorite(id) {
@@ -671,12 +671,13 @@
   // ---------- custom category ops ----------
   function allCategoryNames() { return CATEGORIES.concat(state.customCategories.map(function (c) { return c.name; })); }
   function addCustomCategory() {
-    showTextPrompt("新增自訂類型名稱", "", function (name) {
+    showTextPrompt("新增自訂類型名稱", "", async function (name) {
       if (allCategoryNames().indexOf(name) !== -1) { showToast("這個類型已經存在了"); return; }
-      var cc = { id: uid(), name: name };
-      state.customCategories = state.customCategories.concat([cc]);
+      var res = await sb.from('custom_categories').insert({ name: name, owner_user_id: state.session.user.id }).select();
+      if (res.error || !res.data || !res.data[0]) { showToast("新增類型失敗,請檢查網路後再試一次"); return; }
+      state.customCategories = state.customCategories.concat([{ id: res.data[0].id, name: res.data[0].name }]);
       state.form.category = name;
-      persistCustomCategories();
+      render();
     });
   }
   function renameCustomCategory(id) {
@@ -691,8 +692,13 @@
       state.restaurants = state.restaurants.map(function (r) { return r.category === oldName ? Object.assign({}, r, { category: name }) : r; });
       if (state.form.category === oldName) state.form.category = name;
       if (state.colCatFilter === oldName) state.colCatFilter = name;
-      persistCustomCategories();
-      persistRestaurants();
+      render();
+      sb.from('custom_categories').update({ name: name }).eq('id', id).then(function (res) {
+        if (res.error) showToast("儲存失敗,請檢查網路後再試一次");
+      });
+      sb.from('restaurants').update({ category: name }).eq('category', oldName).then(function (res) {
+        if (res.error) showToast("餐廳類型同步失敗,請檢查網路後再試一次");
+      });
     });
   }
   function deleteCustomCategory(id) {
@@ -703,20 +709,26 @@
       state.restaurants = state.restaurants.map(function (r) { return r.category === cc.name ? Object.assign({}, r, { category: "未分類" }) : r; });
       if (state.form.category === cc.name) state.form.category = CATEGORIES[0];
       if (state.colCatFilter === cc.name) state.colCatFilter = null;
-      persistCustomCategories();
-      persistRestaurants();
+      render();
+      sb.from('custom_categories').delete().eq('id', id).then(function (res) {
+        if (res.error) showToast("刪除失敗,請檢查網路後再試一次");
+      });
+      sb.from('restaurants').update({ category: "未分類" }).eq('category', cc.name).then(function (res) {
+        if (res.error) showToast("餐廳類型同步失敗,請檢查網路後再試一次");
+      });
     }, "刪除");
   }
 
   // ---------- custom dietary preference ops ----------
   function allPrefNames() { return PREF_TAGS.concat(state.customPrefs.map(function (p) { return p.name; })); }
   function addCustomPref() {
-    showTextPrompt("新增飲食偏好名稱", "", function (name) {
+    showTextPrompt("新增飲食偏好名稱", "", async function (name) {
       if (allPrefNames().indexOf(name) !== -1) { showToast("這個偏好已經存在了"); return; }
-      var cp = { id: uid(), name: name };
-      state.customPrefs = state.customPrefs.concat([cp]);
+      var res = await sb.from('custom_prefs').insert({ name: name, owner_user_id: state.session.user.id }).select();
+      if (res.error || !res.data || !res.data[0]) { showToast("新增偏好失敗,請檢查網路後再試一次"); return; }
+      state.customPrefs = state.customPrefs.concat([{ id: res.data[0].id, name: res.data[0].name }]);
       state.memberForm.prefs = state.memberForm.prefs.concat([name]);
-      persistCustomPrefs();
+      render();
     });
   }
   function renameCustomPref(id) {
@@ -742,8 +754,10 @@
       if (state.memberForm.prefs.indexOf(oldName) !== -1) {
         state.memberForm.prefs = state.memberForm.prefs.map(function (x) { return x === oldName ? name : x; });
       }
-      persistCustomPrefs();
       render();
+      sb.from('custom_prefs').update({ name: name }).eq('id', id).then(function (res) {
+        if (res.error) showToast("儲存失敗,請檢查網路後再試一次");
+      });
       changedMembers.forEach(function (m) {
         sb.from('group_members').update({ prefs: m.prefs }).eq('id', m.id).then(function (res) {
           if (res.error) showToast("儲存失敗,請檢查網路後再試一次");
@@ -766,8 +780,10 @@
         }) });
       });
       state.memberForm.prefs = state.memberForm.prefs.filter(function (x) { return x !== cp.name; });
-      persistCustomPrefs();
       render();
+      sb.from('custom_prefs').delete().eq('id', id).then(function (res) {
+        if (res.error) showToast("刪除失敗,請檢查網路後再試一次");
+      });
       changedMembers.forEach(function (m) {
         sb.from('group_members').update({ prefs: m.prefs }).eq('id', m.id).then(function (res) {
           if (res.error) showToast("儲存失敗,請檢查網路後再試一次");
@@ -783,28 +799,44 @@
   function renameCustomTagGlobally(oldName) {
     showTextPrompt("重新命名標籤", oldName, function (name) {
       if (name === oldName) return;
+      var changedRestaurants = [];
       state.restaurants = state.restaurants.map(function (r) {
         if (!r.customTags || r.customTags.indexOf(oldName) === -1) return r;
         var next = r.customTags.filter(function (t) { return t !== oldName; });
         if (next.indexOf(name) === -1) next = next.concat([name]);
-        return Object.assign({}, r, { customTags: next });
+        var updated = Object.assign({}, r, { customTags: next });
+        changedRestaurants.push(updated);
+        return updated;
       });
       if (state.colCustomTagFilter === oldName) state.colCustomTagFilter = name;
       if (state.spinTagFilter === oldName) state.spinTagFilter = name;
       if (state.collab.tagFilter === oldName) state.collab.tagFilter = name;
-      persistRestaurants();
+      render();
+      changedRestaurants.forEach(function (r) {
+        sb.from('restaurants').update({ custom_tags: r.customTags }).eq('id', r.id).then(function (res) {
+          if (res.error) showToast("儲存失敗,請檢查網路後再試一次");
+        });
+      });
     });
   }
   function deleteCustomTagGlobally(name) {
     showConfirm("確定要刪除「" + name + "」這個自訂標籤嗎?會從所有用到的餐廳上移除。", function () {
+      var changedRestaurants = [];
       state.restaurants = state.restaurants.map(function (r) {
         if (!r.customTags || r.customTags.indexOf(name) === -1) return r;
-        return Object.assign({}, r, { customTags: r.customTags.filter(function (t) { return t !== name; }) });
+        var updated = Object.assign({}, r, { customTags: r.customTags.filter(function (t) { return t !== name; }) });
+        changedRestaurants.push(updated);
+        return updated;
       });
       if (state.colCustomTagFilter === name) state.colCustomTagFilter = null;
       if (state.spinTagFilter === name) state.spinTagFilter = null;
       if (state.collab.tagFilter === name) state.collab.tagFilter = null;
-      persistRestaurants();
+      render();
+      changedRestaurants.forEach(function (r) {
+        sb.from('restaurants').update({ custom_tags: r.customTags }).eq('id', r.id).then(function (res) {
+          if (res.error) showToast("儲存失敗,請檢查網路後再試一次");
+        });
+      });
     }, "刪除");
   }
 
