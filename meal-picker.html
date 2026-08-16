@@ -286,8 +286,8 @@
     openPinId: null,
     mapSubTab: "map",
 
-    colCatFilter: "全部",
-    colCustomTagFilter: "全部",
+    colCatFilter: null,
+    colCustomTagFilter: null,
     colFavOnly: false,
 
     decMode: "抽籤",
@@ -515,6 +515,7 @@
       state.customCategories = state.customCategories.map(function (c) { return c.id === id ? Object.assign({}, c, { name: name }) : c; });
       state.restaurants = state.restaurants.map(function (r) { return r.category === oldName ? Object.assign({}, r, { category: name }) : r; });
       if (state.form.category === oldName) state.form.category = name;
+      if (state.colCatFilter === oldName) state.colCatFilter = name;
       persistCustomCategories();
       persistRestaurants();
     });
@@ -526,6 +527,7 @@
       state.customCategories = state.customCategories.filter(function (c) { return c.id !== id; });
       state.restaurants = state.restaurants.map(function (r) { return r.category === cc.name ? Object.assign({}, r, { category: "未分類" }) : r; });
       if (state.form.category === cc.name) state.form.category = CATEGORIES[0];
+      if (state.colCatFilter === cc.name) state.colCatFilter = null;
       persistCustomCategories();
       persistRestaurants();
     }, "刪除");
@@ -608,7 +610,7 @@
         if (!r.customTags || r.customTags.indexOf(name) === -1) return r;
         return Object.assign({}, r, { customTags: r.customTags.filter(function (t) { return t !== name; }) });
       });
-      if (state.colCustomTagFilter === name) state.colCustomTagFilter = "全部";
+      if (state.colCustomTagFilter === name) state.colCustomTagFilter = null;
       if (state.spinTagFilter === name) state.spinTagFilter = null;
       if (state.collab.tagFilter === name) state.collab.tagFilter = null;
       persistRestaurants();
@@ -1104,14 +1106,14 @@
       var name = pair[0], icon = pair[1];
       var b = el("button", { class: "tabBtn" + (state.tab === name ? " active" : "") }, "<span class='ic'>" + icon + "</span><span>" + name + "</span>");
       b.onclick = function () {
-        if (state.tab === name) return;
+        var reclickSameTabMidFlow = state.tab === name && state.orderFlow.step !== "list";
         state.tab = name;
         state.openPinId = null;
         state.groupDetailId = null;
         state.moreSubScreen = null;
         state.orderDetailId = null;
         state.orderGroupImportOpen = false;
-        orderResetFlow();
+        if (!reclickSameTabMidFlow) orderResetFlow();
         render();
       };
       bar.appendChild(b);
@@ -1200,28 +1202,28 @@
     f1.appendChild(favChip);
     var catSelect = el("select", {});
     catSelect.style.cssText = "border:1px solid #3A3F4C;background:#20232B;color:#F3ECDD;border-radius:999px;padding:7px 13px;font-size:13px;";
-    var allCatOpt = el("option", { value: "全部" }, "全部類型");
+    var allCatOpt = el("option", { value: "" }, "全部類型");
     catSelect.appendChild(allCatOpt);
     presentCategories.forEach(function (c) {
       var opt = el("option", { value: c }, escapeHtml(c));
       if (state.colCatFilter === c) opt.setAttribute("selected", "selected");
       catSelect.appendChild(opt);
     });
-    catSelect.onchange = function (e) { state.colCatFilter = e.target.value; render(); };
+    catSelect.onchange = function (e) { state.colCatFilter = e.target.value === "" ? null : e.target.value; render(); };
     f1.appendChild(catSelect);
 
     var allCustomTags = Array.from(new Set(state.restaurants.reduce(function (acc, r) { return acc.concat(r.customTags || []); }, [])));
     if (allCustomTags.length > 0) {
       var customTagSelect = el("select", {});
       customTagSelect.style.cssText = "border:1px solid #3A3F4C;background:#20232B;color:#F3ECDD;border-radius:999px;padding:7px 13px;font-size:13px;";
-      var allCustomTagOpt = el("option", { value: "全部" }, "全部標籤");
+      var allCustomTagOpt = el("option", { value: "" }, "全部標籤");
       customTagSelect.appendChild(allCustomTagOpt);
       allCustomTags.forEach(function (t) {
         var opt = el("option", { value: t }, escapeHtml(t));
         if (state.colCustomTagFilter === t) opt.setAttribute("selected", "selected");
         customTagSelect.appendChild(opt);
       });
-      customTagSelect.onchange = function (e) { state.colCustomTagFilter = e.target.value; render(); };
+      customTagSelect.onchange = function (e) { state.colCustomTagFilter = e.target.value === "" ? null : e.target.value; render(); };
       f1.appendChild(customTagSelect);
     }
     frag.appendChild(f1);
@@ -1257,9 +1259,9 @@
   }
   function filteredCollection() {
     var list = state.restaurants;
-    if (state.colCatFilter !== "全部") list = list.filter(function (r) { return r.category === state.colCatFilter; });
+    if (state.colCatFilter) list = list.filter(function (r) { return r.category === state.colCatFilter; });
     if (state.colFavOnly) list = list.filter(function (r) { return r.favorite; });
-    if (state.colCustomTagFilter !== "全部") list = list.filter(function (r) { return (r.customTags || []).indexOf(state.colCustomTagFilter) !== -1; });
+    if (state.colCustomTagFilter) list = list.filter(function (r) { return (r.customTags || []).indexOf(state.colCustomTagFilter) !== -1; });
     return list;
   }
 
@@ -1897,7 +1899,7 @@
   function deleteOrder(id) {
     showConfirm("確定要刪除這筆點餐嗎?", function () {
       state.orders = state.orders.filter(function (o) { return o.id !== id; });
-      if (state.orderDetailId === id) state.orderDetailId = null;
+      if (state.orderDetailId === id) { state.orderDetailId = null; state.orderGroupImportOpen = false; }
       persistOrders();
     }, "刪除");
   }
@@ -1938,7 +1940,7 @@
       main.appendChild(el("div", { class: "rowName" }, escapeHtml(o.restaurantName || "未命名點餐")));
       main.appendChild(el("div", { class: "rowMeta mono" }, o.items.length + " 人 ・ 小計 $" + total));
       row.appendChild(main);
-      row.onclick = function () { state.orderDetailId = o.id; render(); };
+      row.onclick = function () { state.orderDetailId = o.id; state.orderGroupImportOpen = false; render(); };
       var delBtn = el("button", { class: "iconBtn" }, "🗑");
       delBtn.onclick = function (e) { e.stopPropagation(); deleteOrder(o.id); };
       row.appendChild(delBtn);
