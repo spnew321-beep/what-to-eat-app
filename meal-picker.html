@@ -1383,16 +1383,15 @@
     if (state.drawn && !state.spinning) {
       var popupBg = el("div", { class: "dialogBg" });
       popupBg.onclick = function (e) { if (e.target === popupBg) { state.drawn = null; render(); } };
-      var popupInner = el("div", { style: "width:100%;max-width:380px;" });
+      var popupInner = el("div", { style: "width:100%;max-width:380px;position:relative;" });
       popupInner.onclick = function (e) { e.stopPropagation(); };
+      var shareBtn = el("button", { style: "position:absolute;top:-40px;right:44px;background:none;border:none;color:#F3ECDD;font-size:24px;cursor:pointer;line-height:1;transform:rotate(-45deg);" }, "➤");
+      shareBtn.onclick = function () { shareResultImage(state.drawn, "轉盤結果", "這餐就吃這間"); };
+      popupInner.appendChild(shareBtn);
+      var closeBtn = el("button", { style: "position:absolute;top:-40px;right:0;background:none;border:none;color:#F3ECDD;font-size:26px;cursor:pointer;line-height:1;" }, "✕");
+      closeBtn.onclick = function () { state.drawn = null; render(); };
+      popupInner.appendChild(closeBtn);
       var t = el("div", { class: "ticket" });
-      var iconRow = el("div", { style: "position:absolute;top:14px;right:16px;display:flex;gap:14px;" });
-      var shareIconBtn = el("button", { style: "background:none;border:none;color:#8A6A2A;font-size:19px;cursor:pointer;padding:2px;line-height:1;" }, "↗");
-      shareIconBtn.onclick = function () { shareResultImage(state.drawn, "轉盤結果", "這餐就吃這間"); };
-      var closeIconBtn = el("button", { style: "background:none;border:none;color:#8A6A2A;font-size:19px;cursor:pointer;padding:2px;line-height:1;" }, "✕");
-      closeIconBtn.onclick = function () { state.drawn = null; render(); };
-      iconRow.appendChild(shareIconBtn); iconRow.appendChild(closeIconBtn);
-      t.appendChild(iconRow);
       t.appendChild(el("div", { class: "ticketTop mono" }, "<span>NO. " + ticketNo + "</span><span>轉盤結果</span>"));
       t.appendChild(el("div", { class: "ticketLabel" }, "這餐就吃這間"));
       t.appendChild(el("div", { class: "ticketName" }, escapeHtml(state.drawn.name)));
