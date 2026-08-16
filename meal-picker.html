@@ -232,6 +232,17 @@
   .photoAddBtn { width: 64px; height: 64px; border-radius: 8px; border: 1px dashed #C9BFA5; background: transparent; color: #7A7263; font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 
   .toast { position: fixed; bottom: 76px; left: 50%; transform: translateX(-50%); background: #B23A2E; color: #F3ECDD; padding: 10px 18px; border-radius: 8px; font-size: 13px; z-index: 600; }
+
+  /* In-app dialogs (replace native prompt()/confirm(), which sandboxed embeds can silently block) */
+  .dialogBg { position: fixed; inset: 0; background: rgba(10,11,14,0.6); display: flex; align-items: center; justify-content: center; z-index: 550; padding: 24px; }
+  .dialogBox { background: #F3ECDD; color: #232019; border-radius: 14px; padding: 20px; width: 100%; max-width: 340px; box-shadow: 0 20px 40px rgba(0,0,0,0.4); }
+  .dialogTitle { font-size: 15px; font-weight: 700; margin-bottom: 12px; }
+  .dialogMsg { font-size: 14.5px; line-height: 1.6; margin-bottom: 18px; }
+  .dialogInput { width: 100%; border: 1px solid #C9BFA5; background: #FFFDF7; border-radius: 8px; padding: 10px 11px; font-size: 15px; color: #232019; font-family: inherit; margin-bottom: 16px; }
+  .dialogBtnRow { display: flex; gap: 10px; }
+  .dialogBtnRow button { flex: 1; border-radius: 999px; padding: 10px 0; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .dialogCancelBtn { background: transparent; border: 1px solid #C9BFA5; color: #232019; }
+  .dialogOkBtn { background: #B23A2E; border: none; color: #F3ECDD; }
 </style>
 </head>
 <body>
@@ -302,7 +313,9 @@
     morePanelOpen: null,
     moreSubScreen: null,
 
-    toastMsg: ""
+    toastMsg: "",
+    confirmDialog: null,
+    textPromptDialog: null
   };
 
   var hasStorage = typeof window !== "undefined" && !!window.storage;
@@ -330,6 +343,32 @@
   function groupById(id) { return (state.groups || []).filter(function (g) { return g.id === id; })[0]; }
   function initials(name) { return name ? name.slice(0, 1) : "?"; }
   function showToast(msg) { state.toastMsg = msg; render(); setTimeout(function () { state.toastMsg = ""; render(); }, 2200); }
+
+  // ---------- in-app confirm / text-prompt dialogs (replace native prompt()/confirm()) ----------
+  function showConfirm(message, onConfirm, confirmLabel) {
+    state.confirmDialog = { message: message, onConfirm: onConfirm, confirmLabel: confirmLabel || "確定" };
+    render();
+  }
+  function closeConfirm() { state.confirmDialog = null; render(); }
+  function confirmYes() {
+    var cb = state.confirmDialog && state.confirmDialog.onConfirm;
+    state.confirmDialog = null;
+    if (cb) cb();
+    render();
+  }
+  function showTextPrompt(title, initialValue, onSubmit) {
+    state.textPromptDialog = { title: title, value: initialValue || "", onSubmit: onSubmit };
+    render();
+  }
+  function closeTextPrompt() { state.textPromptDialog = null; render(); }
+  function submitTextPrompt() {
+    var d = state.textPromptDialog;
+    if (!d) return;
+    var v = d.value.trim();
+    state.textPromptDialog = null;
+    if (v) d.onSubmit(v);
+    render();
+  }
 
   // ---------- load / persist ----------
   function migrateLegacyPeopleToGroups(legacyPeople) {
@@ -401,12 +440,13 @@
     persistRestaurants();
   }
   function removeRestaurant(id) {
-    if (!(window.confirm ? window.confirm("確定要刪除這間餐廳嗎?菜單、照片、自訂標籤都會一併刪除。") : true)) return;
-    state.restaurants = state.restaurants.filter(function (r) { return r.id !== id; });
-    state.pool = state.pool.filter(function (pid) { return pid !== id; });
-    state.collab.pool = state.collab.pool.filter(function (pid) { return pid !== id; });
-    if (state.openPinId === id) state.openPinId = null;
-    persistRestaurants();
+    showConfirm("確定要刪除這間餐廳嗎?菜單、照片、自訂標籤都會一併刪除。", function () {
+      state.restaurants = state.restaurants.filter(function (r) { return r.id !== id; });
+      state.pool = state.pool.filter(function (pid) { return pid !== id; });
+      state.collab.pool = state.collab.pool.filter(function (pid) { return pid !== id; });
+      if (state.openPinId === id) state.openPinId = null;
+      persistRestaurants();
+    }, "刪除");
   }
   function openRestaurantModal(loc, existing) {
     state.modalType = "restaurant";
@@ -449,41 +489,39 @@
   // ---------- custom category ops ----------
   function allCategoryNames() { return CATEGORIES.concat(state.customCategories.map(function (c) { return c.name; })); }
   function addCustomCategory() {
-    var name = window.prompt ? window.prompt("新增自訂類型名稱:") : null;
-    if (!name) return;
-    name = name.trim();
-    if (!name) return;
-    if (allCategoryNames().indexOf(name) !== -1) { showToast("這個類型已經存在了"); return; }
-    var cc = { id: uid(), name: name };
-    state.customCategories = state.customCategories.concat([cc]);
-    state.form.category = name;
-    persistCustomCategories();
+    showTextPrompt("新增自訂類型名稱", "", function (name) {
+      if (allCategoryNames().indexOf(name) !== -1) { showToast("這個類型已經存在了"); return; }
+      var cc = { id: uid(), name: name };
+      state.customCategories = state.customCategories.concat([cc]);
+      state.form.category = name;
+      persistCustomCategories();
+    });
   }
   function renameCustomCategory(id) {
     var cc = state.customCategories.filter(function (c) { return c.id === id; })[0];
     if (!cc) return;
-    var name = window.prompt ? window.prompt("重新命名類型:", cc.name) : null;
-    if (!name) return;
-    name = name.trim();
-    if (!name || name === cc.name) return;
-    var taken = CATEGORIES.indexOf(name) !== -1 || state.customCategories.some(function (c) { return c.id !== id && c.name === name; });
-    if (taken) { showToast("這個類型已經存在了"); return; }
-    var oldName = cc.name;
-    state.customCategories = state.customCategories.map(function (c) { return c.id === id ? Object.assign({}, c, { name: name }) : c; });
-    state.restaurants = state.restaurants.map(function (r) { return r.category === oldName ? Object.assign({}, r, { category: name }) : r; });
-    if (state.form.category === oldName) state.form.category = name;
-    persistCustomCategories();
-    persistRestaurants();
+    showTextPrompt("重新命名類型", cc.name, function (name) {
+      if (name === cc.name) return;
+      var taken = CATEGORIES.indexOf(name) !== -1 || state.customCategories.some(function (c) { return c.id !== id && c.name === name; });
+      if (taken) { showToast("這個類型已經存在了"); return; }
+      var oldName = cc.name;
+      state.customCategories = state.customCategories.map(function (c) { return c.id === id ? Object.assign({}, c, { name: name }) : c; });
+      state.restaurants = state.restaurants.map(function (r) { return r.category === oldName ? Object.assign({}, r, { category: name }) : r; });
+      if (state.form.category === oldName) state.form.category = name;
+      persistCustomCategories();
+      persistRestaurants();
+    });
   }
   function deleteCustomCategory(id) {
     var cc = state.customCategories.filter(function (c) { return c.id === id; })[0];
     if (!cc) return;
-    if (!(window.confirm ? window.confirm("確定要刪除「" + cc.name + "」這個類型嗎?使用這個類型的餐廳會自動變成「未分類」。") : true)) return;
-    state.customCategories = state.customCategories.filter(function (c) { return c.id !== id; });
-    state.restaurants = state.restaurants.map(function (r) { return r.category === cc.name ? Object.assign({}, r, { category: "未分類" }) : r; });
-    if (state.form.category === cc.name) state.form.category = CATEGORIES[0];
-    persistCustomCategories();
-    persistRestaurants();
+    showConfirm("確定要刪除「" + cc.name + "」這個類型嗎?使用這個類型的餐廳會自動變成「未分類」。", function () {
+      state.customCategories = state.customCategories.filter(function (c) { return c.id !== id; });
+      state.restaurants = state.restaurants.map(function (r) { return r.category === cc.name ? Object.assign({}, r, { category: "未分類" }) : r; });
+      if (state.form.category === cc.name) state.form.category = CATEGORIES[0];
+      persistCustomCategories();
+      persistRestaurants();
+    }, "刪除");
   }
 
   // ---------- custom tag ops (freeform, no dedicated table) ----------
@@ -491,56 +529,54 @@
     return Array.from(new Set(state.restaurants.reduce(function (acc, r) { return acc.concat(r.customTags || []); }, [])));
   }
   function renameCustomTagGlobally(oldName) {
-    var name = window.prompt ? window.prompt("重新命名標籤:", oldName) : null;
-    if (!name) return;
-    name = name.trim();
-    if (!name || name === oldName) return;
-    state.restaurants = state.restaurants.map(function (r) {
-      if (!r.customTags || r.customTags.indexOf(oldName) === -1) return r;
-      var next = r.customTags.filter(function (t) { return t !== oldName; });
-      if (next.indexOf(name) === -1) next = next.concat([name]);
-      return Object.assign({}, r, { customTags: next });
+    showTextPrompt("重新命名標籤", oldName, function (name) {
+      if (name === oldName) return;
+      state.restaurants = state.restaurants.map(function (r) {
+        if (!r.customTags || r.customTags.indexOf(oldName) === -1) return r;
+        var next = r.customTags.filter(function (t) { return t !== oldName; });
+        if (next.indexOf(name) === -1) next = next.concat([name]);
+        return Object.assign({}, r, { customTags: next });
+      });
+      if (state.colCustomTagFilter === oldName) state.colCustomTagFilter = name;
+      persistRestaurants();
     });
-    if (state.colCustomTagFilter === oldName) state.colCustomTagFilter = name;
-    persistRestaurants();
   }
   function deleteCustomTagGlobally(name) {
-    if (!(window.confirm ? window.confirm("確定要刪除「" + name + "」這個自訂標籤嗎?會從所有用到的餐廳上移除。") : true)) return;
-    state.restaurants = state.restaurants.map(function (r) {
-      if (!r.customTags || r.customTags.indexOf(name) === -1) return r;
-      return Object.assign({}, r, { customTags: r.customTags.filter(function (t) { return t !== name; }) });
-    });
-    if (state.colCustomTagFilter === name) state.colCustomTagFilter = "全部";
-    persistRestaurants();
+    showConfirm("確定要刪除「" + name + "」這個自訂標籤嗎?會從所有用到的餐廳上移除。", function () {
+      state.restaurants = state.restaurants.map(function (r) {
+        if (!r.customTags || r.customTags.indexOf(name) === -1) return r;
+        return Object.assign({}, r, { customTags: r.customTags.filter(function (t) { return t !== name; }) });
+      });
+      if (state.colCustomTagFilter === name) state.colCustomTagFilter = "全部";
+      persistRestaurants();
+    }, "刪除");
   }
 
   // ---------- group ops ----------
   function openAddGroupModal() {
-    var name = window.prompt ? window.prompt("新增群組名稱:") : null;
-    if (!name) return;
-    name = name.trim();
-    if (!name) return;
-    var g = { id: uid(), name: name, members: [] };
-    state.groups = state.groups.concat([g]);
-    persistGroups();
+    showTextPrompt("新增群組名稱", "", function (name) {
+      var g = { id: uid(), name: name, members: [] };
+      state.groups = state.groups.concat([g]);
+      persistGroups();
+    });
   }
   function renameGroup(id) {
     var g = groupById(id);
     if (!g) return;
-    var name = window.prompt ? window.prompt("重新命名群組:", g.name) : null;
-    if (!name) return;
-    name = name.trim();
-    if (!name || name === g.name) return;
-    state.groups = state.groups.map(function (x) { return x.id === id ? Object.assign({}, x, { name: name }) : x; });
-    persistGroups();
+    showTextPrompt("重新命名群組", g.name, function (name) {
+      if (name === g.name) return;
+      state.groups = state.groups.map(function (x) { return x.id === id ? Object.assign({}, x, { name: name }) : x; });
+      persistGroups();
+    });
   }
   function deleteGroup(id) {
     var g = groupById(id);
     if (!g) return;
-    if (!(window.confirm ? window.confirm("確定要刪除「" + g.name + "」這個群組嗎?裡面 " + g.members.length + " 位成員的資料都會一併刪除。") : true)) return;
-    state.groups = state.groups.filter(function (x) { return x.id !== id; });
-    if (state.groupDetailId === id) state.groupDetailId = null;
-    persistGroups();
+    showConfirm("確定要刪除「" + g.name + "」這個群組嗎?裡面 " + g.members.length + " 位成員的資料都會一併刪除。", function () {
+      state.groups = state.groups.filter(function (x) { return x.id !== id; });
+      if (state.groupDetailId === id) state.groupDetailId = null;
+      persistGroups();
+    }, "刪除");
   }
 
   // ---------- member ops ----------
@@ -574,12 +610,13 @@
     render();
   }
   function deleteMember(groupId, memberId) {
-    if (!(window.confirm ? window.confirm("確定要刪除這個成員嗎?") : true)) return;
-    state.groups = state.groups.map(function (g) {
-      if (g.id !== groupId) return g;
-      return Object.assign({}, g, { members: g.members.filter(function (m) { return m.id !== memberId; }) });
-    });
-    persistGroups();
+    showConfirm("確定要刪除這個成員嗎?", function () {
+      state.groups = state.groups.map(function (g) {
+        if (g.id !== groupId) return g;
+        return Object.assign({}, g, { members: g.members.filter(function (m) { return m.id !== memberId; }) });
+      });
+      persistGroups();
+    }, "刪除");
   }
 
   // ---------- decision history ----------
@@ -789,9 +826,10 @@
     };
   }
   function collabCancelSession() {
-    if (!(window.confirm ? window.confirm("確定要取消這個協作場次嗎?目前的候選、表態都會清掉,不會產生任何結果。") : true)) return;
-    collabReset();
-    render();
+    showConfirm("確定要取消這個協作場次嗎?目前的候選、表態都會清掉,不會產生任何結果。", function () {
+      collabReset();
+      render();
+    }, "取消場次");
   }
   function collabChooseAdhoc() {
     state.collab.audienceGroupId = null;
@@ -966,6 +1004,8 @@
     app.appendChild(wrap);
     app.appendChild(renderTabbar());
     if (state.showModal) app.appendChild(renderModal());
+    if (state.confirmDialog) app.appendChild(renderConfirmDialog());
+    if (state.textPromptDialog) app.appendChild(renderTextPromptDialog());
     if (state.toastMsg) app.appendChild(el("div", { class: "toast" }, state.toastMsg));
 
     if (state.tab === "決策" && state.decMode === "抽籤") {
@@ -1179,6 +1219,12 @@
       var row = el("div", { class: "groupListRow" });
       row.appendChild(el("div", { class: "gName" }, escapeHtml(g.name)));
       row.appendChild(el("div", { class: "gCount mono" }, g.members.length + " 位成員"));
+      var editBtn = el("button", { class: "iconBtn" }, "✎");
+      editBtn.onclick = function (e) { e.stopPropagation(); renameGroup(g.id); };
+      row.appendChild(editBtn);
+      var delBtn = el("button", { class: "iconBtn" }, "🗑");
+      delBtn.onclick = function (e) { e.stopPropagation(); deleteGroup(g.id); };
+      row.appendChild(delBtn);
       row.appendChild(el("div", { class: "arrow" }, "›"));
       row.onclick = function () { state.groupDetailId = g.id; render(); };
       lw.appendChild(row);
@@ -1796,10 +1842,11 @@
     render();
   }
   function deleteOrder(id) {
-    if (!(window.confirm ? window.confirm("確定要刪除這筆點餐嗎?") : true)) return;
-    state.orders = state.orders.filter(function (o) { return o.id !== id; });
-    if (state.orderDetailId === id) state.orderDetailId = null;
-    persistOrders();
+    showConfirm("確定要刪除這筆點餐嗎?", function () {
+      state.orders = state.orders.filter(function (o) { return o.id !== id; });
+      if (state.orderDetailId === id) state.orderDetailId = null;
+      persistOrders();
+    }, "刪除");
   }
   function importGroupIntoOrder(orderId, groupId) {
     var o = state.orders.filter(function (x) { return x.id === orderId; })[0];
@@ -2081,6 +2128,48 @@
     });
     frag.appendChild(lw);
     return frag;
+  }
+
+  // ---------- confirm / text-prompt dialogs ----------
+  function renderConfirmDialog() {
+    var bg = el("div", { class: "dialogBg" });
+    bg.onclick = function (e) { if (e.target === bg) closeConfirm(); };
+    var box = el("div", { class: "dialogBox" });
+    box.onclick = function (e) { e.stopPropagation(); };
+    box.appendChild(el("div", { class: "dialogMsg" }, escapeHtml(state.confirmDialog.message)));
+    var btnRow = el("div", { class: "dialogBtnRow" });
+    var cancelBtn = el("button", { class: "dialogCancelBtn" }, "取消");
+    cancelBtn.onclick = closeConfirm;
+    var okBtn = el("button", { class: "dialogOkBtn" }, escapeHtml(state.confirmDialog.confirmLabel));
+    okBtn.onclick = confirmYes;
+    btnRow.appendChild(cancelBtn); btnRow.appendChild(okBtn);
+    box.appendChild(btnRow);
+    bg.appendChild(box);
+    return bg;
+  }
+
+  function renderTextPromptDialog() {
+    var d = state.textPromptDialog;
+    var bg = el("div", { class: "dialogBg" });
+    bg.onclick = function (e) { if (e.target === bg) closeTextPrompt(); };
+    var box = el("div", { class: "dialogBox" });
+    box.onclick = function (e) { e.stopPropagation(); };
+    box.appendChild(el("div", { class: "dialogTitle" }, escapeHtml(d.title)));
+    var input = el("input", { class: "dialogInput" });
+    input.value = d.value;
+    input.oninput = function (e) { d.value = e.target.value; };
+    input.onkeydown = function (e) { if (e.key === "Enter") { e.preventDefault(); submitTextPrompt(); } };
+    box.appendChild(input);
+    var btnRow = el("div", { class: "dialogBtnRow" });
+    var cancelBtn = el("button", { class: "dialogCancelBtn" }, "取消");
+    cancelBtn.onclick = closeTextPrompt;
+    var okBtn = el("button", { class: "dialogOkBtn" }, "確定");
+    okBtn.onclick = submitTextPrompt;
+    btnRow.appendChild(cancelBtn); btnRow.appendChild(okBtn);
+    box.appendChild(btnRow);
+    bg.appendChild(box);
+    setTimeout(function () { input.focus(); }, 10);
+    return bg;
   }
 
   // ---------- MODAL ----------
