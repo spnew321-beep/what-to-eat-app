@@ -235,7 +235,7 @@
   .toast { position: fixed; bottom: 76px; left: 50%; transform: translateX(-50%); background: #B23A2E; color: #F3ECDD; padding: 10px 18px; border-radius: 8px; font-size: 13px; z-index: 600; }
 
   /* In-app dialogs (replace native prompt()/confirm(), which sandboxed embeds can silently block) */
-  .dialogBg { position: fixed; inset: 0; background: rgba(10,11,14,0.6); display: flex; align-items: center; justify-content: center; z-index: 550; padding: 24px; }
+  .dialogBg { position: fixed; inset: 0; background: rgba(10,11,14,0.6); display: flex; align-items: center; justify-content: center; z-index: 550; padding: 24px; overflow-y: auto; }
   .dialogBox { background: #F3ECDD; color: #232019; border-radius: 14px; padding: 20px; width: 100%; max-width: 340px; box-shadow: 0 20px 40px rgba(0,0,0,0.4); }
   .dialogTitle { font-size: 15px; font-weight: 700; margin-bottom: 12px; }
   .dialogMsg { font-size: 14.5px; line-height: 1.6; margin-bottom: 18px; }
@@ -355,8 +355,7 @@
   function confirmYes() {
     var cb = state.confirmDialog && state.confirmDialog.onConfirm;
     state.confirmDialog = null;
-    if (cb) cb();
-    render();
+    if (cb) cb(); else render();
   }
   function showTextPrompt(title, initialValue, onSubmit) {
     state.textPromptDialog = { title: title, value: initialValue || "", onSubmit: onSubmit };
@@ -374,7 +373,8 @@
 
   // ---------- load / persist ----------
   function migrateLegacyPeopleToGroups(legacyPeople) {
-    if (!legacyPeople || legacyPeople.length === 0) return SEED_GROUPS.slice();
+    if (legacyPeople === null) return SEED_GROUPS.slice();
+    if (legacyPeople.length === 0) return [];
     return [{ id: uid(), name: "家人", members: legacyPeople.map(function (p) {
       return { id: p.id, name: p.name, color: p.color, prefs: (p.prefs || []).slice(), linkedUserId: null };
     }) }];
@@ -597,6 +597,8 @@
         return Object.assign({}, r, { customTags: next });
       });
       if (state.colCustomTagFilter === oldName) state.colCustomTagFilter = name;
+      if (state.spinTagFilter === oldName) state.spinTagFilter = name;
+      if (state.collab.tagFilter === oldName) state.collab.tagFilter = name;
       persistRestaurants();
     });
   }
@@ -607,6 +609,8 @@
         return Object.assign({}, r, { customTags: r.customTags.filter(function (t) { return t !== name; }) });
       });
       if (state.colCustomTagFilter === name) state.colCustomTagFilter = "全部";
+      if (state.spinTagFilter === name) state.spinTagFilter = null;
+      if (state.collab.tagFilter === name) state.collab.tagFilter = null;
       persistRestaurants();
     }, "刪除");
   }
@@ -640,10 +644,12 @@
 
   // ---------- member ops ----------
   function openAddMemberModal(groupId, existing) {
+    var g = groupById(groupId);
+    if (!g) { showToast("找不到這個群組"); return; }
     state.modalType = "member";
     state.memberForm = existing
       ? Object.assign({}, existing, { groupId: groupId, prefs: existing.prefs.slice() })
-      : { id: null, groupId: groupId, name: "", color: PERSON_COLORS[groupById(groupId).members.length % PERSON_COLORS.length], prefs: [] };
+      : { id: null, groupId: groupId, name: "", color: PERSON_COLORS[g.members.length % PERSON_COLORS.length], prefs: [] };
     state.showModal = true;
     render();
   }
@@ -908,6 +914,7 @@
   }
   function collabActiveTick() {
     if (state.collab.step !== "active") { clearInterval(collabTimerHandle); collabTimerHandle = null; return; }
+    if (state.confirmDialog || state.textPromptDialog) return;
     if (Date.now() >= state.collab.deadlineAt) {
       clearInterval(collabTimerHandle); collabTimerHandle = null;
       collabSettle();
@@ -1066,7 +1073,7 @@
     if (state.tab === "更多" && state.moreSubScreen) return function () { state.moreSubScreen = null; render(); };
     if (state.tab === "群組" && state.groupDetailId) return function () { state.groupDetailId = null; render(); };
     if (state.tab === "點餐") {
-      if (state.orderDetailId) return function () { state.orderDetailId = null; render(); };
+      if (state.orderDetailId) return function () { state.orderDetailId = null; state.orderGroupImportOpen = false; render(); };
       if (state.orderFlow.step === "pickMode") return function () { state.orderFlow.step = "pickRestaurant"; render(); };
       if (state.orderFlow.step === "pickGroup") return function () { state.orderFlow.step = "pickMode"; render(); };
       if (state.orderFlow.step === "invite") return function () { state.orderFlow.step = state.orderFlow.mode === "group" ? "pickGroup" : "pickMode"; render(); };
@@ -1097,11 +1104,13 @@
       var name = pair[0], icon = pair[1];
       var b = el("button", { class: "tabBtn" + (state.tab === name ? " active" : "") }, "<span class='ic'>" + icon + "</span><span>" + name + "</span>");
       b.onclick = function () {
+        if (state.tab === name) return;
         state.tab = name;
         state.openPinId = null;
         state.groupDetailId = null;
         state.moreSubScreen = null;
         state.orderDetailId = null;
+        state.orderGroupImportOpen = false;
         orderResetFlow();
         render();
       };
@@ -1381,7 +1390,7 @@
     if (spinTagNames.length > 0) {
       var tagSelect = el("select", {});
       tagSelect.style.cssText = "border:1px solid #3A3F4C;background:#20232B;color:#F3ECDD;border-radius:999px;padding:7px 13px;font-size:13px;";
-      tagSelect.appendChild(el("option", { value: "全部" }, "全部標籤"));
+      tagSelect.appendChild(el("option", { value: "" }, "全部標籤"));
       spinTagNames.forEach(function (name) {
         var count = state.restaurants.filter(function (r) { return (r.customTags || []).indexOf(name) !== -1; }).length;
         var opt = el("option", { value: name }, escapeHtml(name) + "(" + count + ")");
@@ -1389,7 +1398,7 @@
         tagSelect.appendChild(opt);
       });
       tagSelect.onchange = function (e) {
-        state.spinTagFilter = e.target.value === "全部" ? null : e.target.value;
+        state.spinTagFilter = e.target.value === "" ? null : e.target.value;
         if (state.spinTagFilter) state.browseOpen = true;
         render();
       };
@@ -1699,7 +1708,7 @@
     if (quickTagNames.length > 0) {
       var collabTagSelect = el("select", {});
       collabTagSelect.style.cssText = "border:1px solid #3A3F4C;background:#20232B;color:#F3ECDD;border-radius:999px;padding:7px 13px;font-size:13px;";
-      collabTagSelect.appendChild(el("option", { value: "全部" }, "全部標籤"));
+      collabTagSelect.appendChild(el("option", { value: "" }, "全部標籤"));
       quickTagNames.forEach(function (name) {
         var count = state.restaurants.filter(function (r) { return (r.customTags || []).indexOf(name) !== -1; }).length;
         var opt = el("option", { value: name }, escapeHtml(name) + "(" + count + ")");
@@ -1707,7 +1716,7 @@
         collabTagSelect.appendChild(opt);
       });
       collabTagSelect.onchange = function (e) {
-        state.collab.tagFilter = e.target.value === "全部" ? null : e.target.value;
+        state.collab.tagFilter = e.target.value === "" ? null : e.target.value;
         if (state.collab.tagFilter) state.collab.browseOpen = true;
         render();
       };
@@ -1850,7 +1859,7 @@
     var items = [];
     if (mode === "group" && groupId) {
       var g = groupById(groupId);
-      if (g) items = g.members.map(function (m) { return { id: uid(), personName: m.name, item: "", price: "" }; });
+      if (g) items = g.members.map(function (m) { return { id: uid(), memberId: m.id, personName: m.name, item: "", price: "" }; });
     }
     var order = {
       id: uid(), restaurantId: r ? r.id : null, restaurantName: r ? r.name : "", category: r ? r.category : "",
@@ -1896,9 +1905,12 @@
     var o = state.orders.filter(function (x) { return x.id === orderId; })[0];
     var g = groupById(groupId);
     if (!o || !g) return;
-    var existingNames = o.items.map(function (it) { return it.personName; });
-    var newItems = g.members.filter(function (m) { return existingNames.indexOf(m.name) === -1; }).map(function (m) {
-      return { id: uid(), personName: m.name, item: "", price: "" };
+    var existingMemberIds = o.items.map(function (it) { return it.memberId; }).filter(Boolean);
+    var existingNames = o.items.filter(function (it) { return !it.memberId; }).map(function (it) { return it.personName; });
+    var newItems = g.members.filter(function (m) {
+      return existingMemberIds.indexOf(m.id) === -1 && existingNames.indexOf(m.name) === -1;
+    }).map(function (m) {
+      return { id: uid(), memberId: m.id, personName: m.name, item: "", price: "" };
     });
     o.items = o.items.concat(newItems);
     state.orderGroupImportOpen = false;
