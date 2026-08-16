@@ -108,6 +108,7 @@
   .filters { width: 100%; max-width: 560px; display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
   .chip { flex-shrink: 0; background: transparent; border: 1px solid #3A3F4C; color: #B7BECB; padding: 7px 13px; border-radius: 999px; font-size: 13px; cursor: pointer; }
   .chip.active { background: #C99A3D; border-color: #C99A3D; color: #201804; font-weight: 700; }
+  .chip.include { background: #4C8A5E; border-color: #4C8A5E; color: #F3ECDD; font-weight: 700; }
   .chip.excl { background: #B23A2E; border-color: #B23A2E; color: #F3ECDD; font-weight: 700; }
   .chip.tagChip.active { background: #5C7A6B; border-color: #5C7A6B; color: #F3ECDD; }
 
@@ -289,7 +290,7 @@
     colFavOnly: false,
 
     decMode: "抽籤",
-    pool: [], drawn: null, browseOpen: false, spinTagFilter: null, catState: {}, suggestCatExpanded: false, suggestion: null, spinning: false,
+    pool: [], drawn: null, browseOpen: false, spinTagFilter: null, catState: {}, suggestion: null, spinning: false,
 
     collab: {
       step: "chooseAudience",
@@ -735,7 +736,7 @@
     roundRectPath(ctx, cardX, cardY, cardW, cardH, 14); ctx.fill();
     ctx.textAlign = "left";
     ctx.fillStyle = "#8A6A2A"; ctx.font = "bold 18px sans-serif";
-    ctx.fillText(label || "今晚就吃這間", cardX + 36, cardY + 60);
+    ctx.fillText(label || "這餐就吃這間", cardX + 36, cardY + 60);
     ctx.fillStyle = "#232019"; ctx.font = "bold 46px sans-serif";
     var nameBottom = cardY + 130;
     var used = wrapCjkText(ctx, restaurant.name, cardX + 36, nameBottom, cardW - 72, 54);
@@ -1392,11 +1393,17 @@
       frag.appendChild(el("div", { class: "excludeNote", style: "text-align:center;margin-top:-12px" }, "候選名單至少要 2 間才能轉盤"));
     }
 
-    if (state.drawn) {
-      var stage = el("div", { class: "ticketStage" });
+    if (state.drawn && !state.spinning) {
+      var popupBg = el("div", { class: "dialogBg" });
+      popupBg.onclick = function (e) { if (e.target === popupBg) { state.drawn = null; render(); } };
+      var popupInner = el("div", { style: "width:100%;max-width:380px;position:relative;" });
+      popupInner.onclick = function (e) { e.stopPropagation(); };
+      var closeBtn = el("button", { style: "position:absolute;top:-40px;right:0;background:none;border:none;color:#F3ECDD;font-size:26px;cursor:pointer;line-height:1;" }, "✕");
+      closeBtn.onclick = function () { state.drawn = null; render(); };
+      popupInner.appendChild(closeBtn);
       var t = el("div", { class: "ticket" });
       t.appendChild(el("div", { class: "ticketTop mono" }, "<span>NO. " + ticketNo + "</span><span>轉盤結果</span>"));
-      t.appendChild(el("div", { class: "ticketLabel" }, "今晚就吃這間"));
+      t.appendChild(el("div", { class: "ticketLabel" }, "這餐就吃這間"));
       t.appendChild(el("div", { class: "ticketName" }, escapeHtml(state.drawn.name)));
       t.appendChild(el("div", { class: "ticketMeta mono" }, escapeHtml(state.drawn.category) + " ・ " + priceLabel(state.drawn.price)));
       if (state.drawn.customTags && state.drawn.customTags.length) {
@@ -1406,9 +1413,10 @@
         });
         t.appendChild(whoWrap);
       }
-      stage.appendChild(t);
-      frag.appendChild(stage);
-      appendShareBtn(frag, state.drawn, "轉盤結果", "今晚就吃這間");
+      popupInner.appendChild(t);
+      appendShareBtn(popupInner, state.drawn, "轉盤結果", "這餐就吃這間");
+      popupBg.appendChild(popupInner);
+      frag.appendChild(popupBg);
     }
     return frag;
   }
@@ -1419,18 +1427,12 @@
     var f = el("div", { class: "filters" });
     function makeCatChip(c) {
       var st = state.catState[c];
-      var cls = "chip" + (st === "include" ? " active" : "") + (st === "exclude" ? " excl" : "");
+      var cls = "chip" + (st === "include" ? " include" : "") + (st === "exclude" ? " excl" : "");
       var b = el("button", { class: cls }, escapeHtml(c));
       b.onclick = function () { cycleCatState(c); };
       return b;
     }
-    COMMON_CATEGORIES.forEach(function (c) { f.appendChild(makeCatChip(c)); });
-    if (state.suggestCatExpanded) MORE_CATEGORIES.concat(state.customCategories.map(function (c) { return c.name; })).forEach(function (c) { f.appendChild(makeCatChip(c)); });
-    if (MORE_CATEGORIES.length > 0) {
-      var moreToggle = el("button", { class: "ghostBtn" }, state.suggestCatExpanded ? "收合 ▲" : "更多類型 ▾");
-      moreToggle.onclick = function () { state.suggestCatExpanded = !state.suggestCatExpanded; render(); };
-      f.appendChild(moreToggle);
-    }
+    COMMON_CATEGORIES.concat(MORE_CATEGORIES).concat(state.customCategories.map(function (c) { return c.name; })).forEach(function (c) { f.appendChild(makeCatChip(c)); });
     frag.appendChild(f);
     var auto = recentCategories(1);
     if (auto.length > 0) frag.appendChild(el("div", { class: "excludeNote" }, "🕓 上一餐吃過「" + escapeHtml(auto[0]) + "」,建議時會優先避開(除非你手動勾選想吃)"));
