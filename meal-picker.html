@@ -1530,7 +1530,7 @@
       }
     }
     frag.appendChild(el("div", { class: "sectionLabel mono" }, "決定這次的決策模式"));
-    var modeRow = el("div", { class: "filters" });
+    var modeRow = el("div", { class: "filters", style: "justify-content:center;" });
     [["random", "🎡 直接轉盤"], ["vote_first", "✅ 先表態再轉盤"]].forEach(function (pair) {
       var b = el("button", { class: "chip" + (state.collab.decisionMode === pair[0] ? " active" : "") }, pair[1]);
       b.onclick = function () { state.collab.decisionMode = pair[0]; render(); };
@@ -1544,7 +1544,7 @@
     ));
 
     frag.appendChild(el("div", { class: "sectionLabel mono", style: "margin-top:16px" }, "設定截止時間(未來 7 天內)"));
-    var presetRow = el("div", { class: "filters" });
+    var presetRow = el("div", { class: "filters", style: "justify-content:center;" });
     [["1h", "1 小時後"], ["tonight", "今晚 8 點"], ["tomorrownoon", "明天中午"], ["weekend", "本週末"]].forEach(function (pair) {
       var b = el("button", { class: "chip" + (state.collab.deadlinePreset === pair[0] ? " active" : "") }, pair[1]);
       b.onclick = function () { state.collab.deadlineAt = collabPresetDeadline(pair[0]); state.collab.deadlinePreset = pair[0]; render(); };
@@ -1559,7 +1559,14 @@
     dtInput.value = toDatetimeLocalValue(state.collab.deadlineAt || collabDefaultDeadline());
     dtInput.min = toDatetimeLocalValue(Date.now() + 60000);
     dtInput.max = toDatetimeLocalValue(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    dtInput.onchange = function (e) { var t = new Date(e.target.value).getTime(); if (!isNaN(t)) { state.collab.deadlineAt = t; state.collab.deadlinePreset = null; render(); } };
+    dtInput.onchange = function (e) {
+      var t = new Date(e.target.value).getTime();
+      if (!isNaN(t)) {
+        state.collab.deadlineAt = t;
+        state.collab.deadlinePreset = null;
+        setTimeout(render, 0);
+      }
+    };
     dtWrap.appendChild(dtInput);
     frag.appendChild(dtWrap);
 
