@@ -298,6 +298,7 @@
     toastMsg: "",
     confirmDialog: null,
     textPromptDialog: null,
+    photoLightboxUrl: null,
 
     session: null,
     authReady: false,
@@ -1356,6 +1357,7 @@
     if (state.showModal) app.appendChild(renderModal());
     if (state.confirmDialog) app.appendChild(renderConfirmDialog());
     if (state.textPromptDialog) app.appendChild(renderTextPromptDialog());
+    if (state.photoLightboxUrl) app.appendChild(renderPhotoLightbox());
     if (state.toastMsg) app.appendChild(el("div", { class: "toast" }, state.toastMsg));
 
     if (state.tab === "決策" && state.decMode === "抽籤") {
@@ -2592,6 +2594,22 @@
     return bg;
   }
 
+  function openPhotoLightbox(url) { state.photoLightboxUrl = url; render(); }
+  function closePhotoLightbox() { state.photoLightboxUrl = null; render(); }
+  function renderPhotoLightbox() {
+    var bg = el("div", { class: "dialogBg" });
+    bg.style.padding = "12px";
+    bg.onclick = closePhotoLightbox;
+    var img = el("img", { src: state.photoLightboxUrl });
+    img.style.cssText = "max-width:100%;max-height:100%;border-radius:10px;display:block;";
+    bg.appendChild(img);
+    var closeBtn = el("button", { class: "iconBtn" }, "✕");
+    closeBtn.style.cssText = "position:fixed;top:16px;right:16px;background:#20232B;color:#F3ECDD;";
+    closeBtn.onclick = closePhotoLightbox;
+    bg.appendChild(closeBtn);
+    return bg;
+  }
+
   // ---------- MODAL ----------
   function renderModal() {
     var bg = el("div", { class: "modalBg" });
@@ -2725,7 +2743,10 @@
       var photoGrid = el("div", { class: "photoThumbGrid" });
       state.form.photos.forEach(function (p, idx) {
         var thumb = el("div", { class: "photoThumb" });
-        thumb.appendChild(el("img", { src: p.url }));
+        var thumbImg = el("img", { src: p.url });
+        thumbImg.style.cursor = "zoom-in";
+        thumbImg.onclick = function () { openPhotoLightbox(p.url); };
+        thumb.appendChild(thumbImg);
         var rmPhoto = el("button", { class: "rmPhoto" }, "✕");
         rmPhoto.onclick = function () { state.form.photos = state.form.photos.filter(function (_, i) { return i !== idx; }); render(); };
         thumb.appendChild(rmPhoto);
