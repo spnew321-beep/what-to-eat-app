@@ -1238,28 +1238,22 @@
     var g = groupById(groupId);
     if (!g) { frag.appendChild(el("div", { class: "emptyList" }, "找不到這個群組")); return frag; }
 
-    var manageRow = el("div", { style: "display:flex;gap:16px;margin-bottom:12px;" });
-    var renameBtn = el("button", { class: "ghostBtn" }, "✎ 改名");
-    renameBtn.onclick = function () { renameGroup(g.id); };
-    var delBtn = el("button", { class: "ghostBtn", style: "color:#B23A2E;border-color:#B23A2E;" }, "🗑 刪除群組");
-    delBtn.onclick = function () { deleteGroup(g.id); };
-    manageRow.appendChild(renameBtn); manageRow.appendChild(delBtn);
-    frag.appendChild(manageRow);
-
     if (g.members.length === 0) {
       frag.appendChild(el("div", { class: "emptyList" }, "還沒有成員,點右上角「＋」新增第一個"));
+      return frag;
     }
+    var grid = el("div", { style: "display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%;" });
     g.members.forEach(function (m) {
-      var card = el("div", { class: "memberCard" });
+      var card = el("div", { class: "memberCard", style: "margin-bottom:0;" });
       var head = el("div", { class: "memberHead" });
       head.appendChild(el("div", { class: "avatar", style: "background:" + m.color }, initials(m.name)));
       head.appendChild(el("div", { class: "memberName" }, escapeHtml(m.name)));
+      card.appendChild(head);
       var badge = el("button", { class: "kindBadge" }, m.linkedUserId ? "✅ 已連結帳號" : "🔓 未連結帳號");
       badge.onclick = function () { showToast(m.linkedUserId ? "已連結真帳號" : "需要帳號系統才能連結真帳號,目前先記名字跟偏好"); };
-      head.appendChild(badge);
-      card.appendChild(head);
+      card.appendChild(badge);
       if (m.prefs && m.prefs.length) {
-        var prefWrap = el("div", { class: "prefTags" });
+        var prefWrap = el("div", { class: "prefTags", style: "margin-top:8px;" });
         m.prefs.forEach(function (pr) { prefWrap.appendChild(el("span", { class: "prefTag" }, escapeHtml(pr))); });
         card.appendChild(prefWrap);
       }
@@ -1270,8 +1264,9 @@
       delMBtn.onclick = function () { deleteMember(g.id, m.id); };
       btnRow.appendChild(editBtn); btnRow.appendChild(delMBtn);
       card.appendChild(btnRow);
-      frag.appendChild(card);
+      grid.appendChild(card);
     });
+    frag.appendChild(grid);
     return frag;
   }
 
