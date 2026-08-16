@@ -1546,7 +1546,7 @@
       favBtn.onclick = function (e) { e.stopPropagation(); toggleFavorite(r.id); };
       row.appendChild(favBtn);
       if (r.photos && r.photos.length) {
-        var photoBtn = el("button", { class: "iconBtn" }, "📷");
+        var photoBtn = el("button", { class: "iconBtn" }, "🍴");
         photoBtn.onclick = function (e) { e.stopPropagation(); openPhotoLightbox(r.photos[0].url); };
         row.appendChild(photoBtn);
       }
