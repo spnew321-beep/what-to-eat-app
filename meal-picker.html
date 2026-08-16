@@ -2248,6 +2248,17 @@
         });
         f5b.appendChild(ctPills);
       }
+      var availableTags = allCustomTagNames().filter(function (t) { return state.form.customTags.indexOf(t) === -1; });
+      if (availableTags.length > 0) {
+        f5b.appendChild(el("div", { style: "font-size:11px;color:#7A7263;margin:2px 0 6px;" }, "現有標籤(點一下加入):"));
+        var existingTagRow = el("div", { class: "catRow", style: "margin-bottom:10px" });
+        availableTags.forEach(function (t) {
+          var tagChip = el("button", { class: "catChip" }, escapeHtml(t));
+          tagChip.onclick = function () { state.form.customTags = state.form.customTags.concat([t]); render(); };
+          existingTagRow.appendChild(tagChip);
+        });
+        f5b.appendChild(existingTagRow);
+      }
       var ctRow = el("div", { style: "display:flex;gap:8px" });
       var ctInput = el("input", { placeholder: "例如:適合約會、平日券" });
       ctInput.style.cssText = "flex:1;border:1px solid #C9BFA5;background:#FFFDF7;border-radius:8px;padding:10px 11px;font-size:14px;color:#232019;font-family:inherit;";
