@@ -253,7 +253,6 @@
 <script>
 (function () {
   var RKEY = "meal-picker:restaurants:v6";
-  var GKEY = "meal-picker:groups:v1";
   var HKEY = "meal-picker:history:v2";
   var CKEY = "meal-picker:customCategories:v1";
   var OKEY = "meal-picker:orders:v1";
@@ -265,19 +264,6 @@
   var PERSON_COLORS = ["#B23A2E","#C99A3D","#5C7A6B","#4E6E81","#7A5C74","#9C5B3E","#3E7C74"];
   var WHEEL_PALETTE = ["#C99A3D","#5C7A6B","#B23A2E","#4E6E81","#7A5C74","#9C5B3E","#3E7C74","#7C7C4A"];
   var PREF_TAGS = ["愛吃飯","愛吃麵","不吃牛","不吃辣","不吃海鮮","素食","不忌口"];
-
-  var SEED_GROUPS = [
-    { id: "g1", name: "家人", members: [
-      { id: "p1", name: "哥哥", color: PERSON_COLORS[0], prefs: ["愛吃麵"], linkedUserId: null },
-      { id: "p2", name: "爸爸", color: PERSON_COLORS[1], prefs: ["不吃牛"], linkedUserId: null },
-      { id: "p3", name: "媽媽", color: PERSON_COLORS[2], prefs: ["愛吃飯","不吃辣"], linkedUserId: null }
-    ] }
-  ];
-  var SEED_RESTAURANTS = [
-    { id: "s1", name: "巷口滷味", category: "小吃", price: 1, note: "記得加辣", favorite: true, x: null, y: null, customTags: ["常去"], menuItems: [{ id: "m1", name: "綜合滷味", price: 80 }, { id: "m2", name: "豆干", price: 20 }], photos: [] },
-    { id: "s2", name: "一風堂拉麵", category: "日式", price: 2, note: "", favorite: false, x: null, y: null, customTags: ["哥哥最愛"], menuItems: [], photos: [] },
-    { id: "s3", name: "阿霞火鍋", category: "中式", price: 2, note: "湯頭濃郁", favorite: true, x: null, y: null, customTags: ["適合聚餐"], menuItems: [], photos: [] }
-  ];
 
   var state = {
     restaurants: null, groups: null, history: null, customCategories: null, orders: null, customPrefs: null,
@@ -517,6 +503,14 @@
   }
 
   // ---------- load / persist ----------
+  function mapDbGroup(g) {
+    return {
+      id: g.id, name: g.name,
+      members: (g.group_members || []).map(function (m) {
+        return { id: m.id, name: m.name, color: m.color, prefs: m.prefs || [], linkedUserId: m.linked_user_id };
+      })
+    };
+  }
   function mapDbRestaurant(r) {
     return {
       id: r.id, name: r.name, category: r.category, price: r.price, note: r.note || "",
@@ -535,8 +529,11 @@
       state.restaurants = rRes.error ? [] : rRes.data.map(mapDbRestaurant);
       if (rRes.error) showToast("讀取餐廳資料失敗,請檢查網路後重新整理");
 
-      // 群組/自訂類型/自訂偏好/決策歷史/點餐還沒接上 Supabase(task #36-39),先維持原本的本地暫存
-      state.groups = SEED_GROUPS.slice();
+      var gRes = await sb.from('groups').select('*, group_members(*)').order('created_at', { ascending: true });
+      state.groups = gRes.error ? [] : gRes.data.map(mapDbGroup);
+      if (gRes.error) showToast("讀取群組資料失敗,請檢查網路後重新整理");
+
+      // 自訂類型/自訂偏好/決策歷史/點餐還沒接上 Supabase(task #37-39),先維持原本的本地暫存
       state.history = [];
       state.customCategories = [];
       state.orders = [];
@@ -545,7 +542,7 @@
       render();
     })().catch(function () {
       state.restaurants = [];
-      state.groups = SEED_GROUPS.slice();
+      state.groups = [];
       state.history = [];
       state.customCategories = [];
       state.orders = [];
@@ -563,7 +560,6 @@
     return false;
   }
   function persistRestaurants() { render(); if (hasStorage) (async function () { var ok = await safeStorageSet(RKEY, JSON.stringify(state.restaurants)); if (!ok) showToast("儲存失敗,請檢查網路後再試一次"); })(); }
-  function persistGroups() { render(); if (hasStorage) (async function () { var ok = await safeStorageSet(GKEY, JSON.stringify(state.groups)); if (!ok) showToast("儲存失敗,請檢查網路後再試一次"); })(); }
   function persistHistory() { if (hasStorage) (async function () { await safeStorageSet(HKEY, JSON.stringify(state.history)); })(); }
   function persistCustomCategories() { render(); if (hasStorage) (async function () { var ok = await safeStorageSet(CKEY, JSON.stringify(state.customCategories)); if (!ok) showToast("儲存失敗,請檢查網路後再試一次"); })(); }
   function persistOrders() { render(); if (hasStorage) (async function () { var ok = await safeStorageSet(OKEY, JSON.stringify(state.orders)); if (!ok) showToast("儲存失敗,請檢查網路後再試一次"); })(); }
@@ -731,36 +727,52 @@
       var taken = PREF_TAGS.indexOf(name) !== -1 || state.customPrefs.some(function (p) { return p.id !== id && p.name === name; });
       if (taken) { showToast("這個偏好已經存在了"); return; }
       var oldName = cp.name;
+      var changedMembers = [];
       state.customPrefs = state.customPrefs.map(function (p) { return p.id === id ? Object.assign({}, p, { name: name }) : p; });
       state.groups = state.groups.map(function (g) {
         return Object.assign({}, g, { members: g.members.map(function (m) {
           if (!m.prefs || m.prefs.indexOf(oldName) === -1) return m;
           var next = m.prefs.filter(function (x) { return x !== oldName; });
           if (next.indexOf(name) === -1) next = next.concat([name]);
-          return Object.assign({}, m, { prefs: next });
+          var updated = Object.assign({}, m, { prefs: next });
+          changedMembers.push(updated);
+          return updated;
         }) });
       });
       if (state.memberForm.prefs.indexOf(oldName) !== -1) {
         state.memberForm.prefs = state.memberForm.prefs.map(function (x) { return x === oldName ? name : x; });
       }
       persistCustomPrefs();
-      persistGroups();
+      render();
+      changedMembers.forEach(function (m) {
+        sb.from('group_members').update({ prefs: m.prefs }).eq('id', m.id).then(function (res) {
+          if (res.error) showToast("儲存失敗,請檢查網路後再試一次");
+        });
+      });
     });
   }
   function deleteCustomPref(id) {
     var cp = state.customPrefs.filter(function (p) { return p.id === id; })[0];
     if (!cp) return;
     showConfirm("確定要刪除「" + cp.name + "」這個飲食偏好嗎?有勾選這個偏好的成員會移除這個標籤。", function () {
+      var changedMembers = [];
       state.customPrefs = state.customPrefs.filter(function (p) { return p.id !== id; });
       state.groups = state.groups.map(function (g) {
         return Object.assign({}, g, { members: g.members.map(function (m) {
           if (!m.prefs || m.prefs.indexOf(cp.name) === -1) return m;
-          return Object.assign({}, m, { prefs: m.prefs.filter(function (x) { return x !== cp.name; }) });
+          var updated = Object.assign({}, m, { prefs: m.prefs.filter(function (x) { return x !== cp.name; }) });
+          changedMembers.push(updated);
+          return updated;
         }) });
       });
       state.memberForm.prefs = state.memberForm.prefs.filter(function (x) { return x !== cp.name; });
       persistCustomPrefs();
-      persistGroups();
+      render();
+      changedMembers.forEach(function (m) {
+        sb.from('group_members').update({ prefs: m.prefs }).eq('id', m.id).then(function (res) {
+          if (res.error) showToast("儲存失敗,請檢查網路後再試一次");
+        });
+      });
     }, "刪除");
   }
 
@@ -798,10 +810,11 @@
 
   // ---------- group ops ----------
   function openAddGroupModal() {
-    showTextPrompt("新增群組名稱", "", function (name) {
-      var g = { id: uid(), name: name, members: [] };
-      state.groups = state.groups.concat([g]);
-      persistGroups();
+    showTextPrompt("新增群組名稱", "", async function (name) {
+      var res = await sb.from('groups').insert({ name: name, owner_user_id: state.session.user.id }).select();
+      if (res.error || !res.data || !res.data[0]) { showToast("新增群組失敗,請檢查網路後再試一次"); return; }
+      state.groups = state.groups.concat([{ id: res.data[0].id, name: res.data[0].name, members: [] }]);
+      render();
     });
   }
   function renameGroup(id) {
@@ -810,7 +823,10 @@
     showTextPrompt("重新命名群組", g.name, function (name) {
       if (name === g.name) return;
       state.groups = state.groups.map(function (x) { return x.id === id ? Object.assign({}, x, { name: name }) : x; });
-      persistGroups();
+      render();
+      sb.from('groups').update({ name: name }).eq('id', id).then(function (res) {
+        if (res.error) showToast("儲存失敗,請檢查網路後再試一次");
+      });
     });
   }
   function deleteGroup(id) {
@@ -819,7 +835,10 @@
     showConfirm("確定要刪除「" + g.name + "」這個群組嗎?裡面 " + g.members.length + " 位成員的資料都會一併刪除。", function () {
       state.groups = state.groups.filter(function (x) { return x.id !== id; });
       if (state.groupDetailId === id) state.groupDetailId = null;
-      persistGroups();
+      render();
+      sb.from('groups').delete().eq('id', id).then(function (res) {
+        if (res.error) showToast("刪除失敗,請檢查網路後再試一次");
+      });
     }, "刪除");
   }
 
@@ -837,23 +856,34 @@
   function submitMemberForm() {
     if (!state.memberForm.name.trim()) return;
     var groupId = state.memberForm.groupId;
-    state.groups = state.groups.map(function (g) {
-      if (g.id !== groupId) return g;
-      var members;
-      if (state.memberForm.id) {
-        members = g.members.map(function (m) {
-          return m.id === state.memberForm.id
-            ? Object.assign({}, m, { name: state.memberForm.name.trim(), color: state.memberForm.color, prefs: state.memberForm.prefs })
-            : m;
-        });
-      } else {
-        members = g.members.concat([{ id: uid(), name: state.memberForm.name.trim(), color: state.memberForm.color, prefs: state.memberForm.prefs, linkedUserId: null }]);
-      }
-      return Object.assign({}, g, { members: members });
-    });
-    persistGroups();
+    var memberId = state.memberForm.id;
+    var name = state.memberForm.name.trim();
+    var color = state.memberForm.color;
+    var prefs = state.memberForm.prefs;
     state.showModal = false;
-    render();
+    if (memberId) {
+      state.groups = state.groups.map(function (g) {
+        if (g.id !== groupId) return g;
+        return Object.assign({}, g, { members: g.members.map(function (m) {
+          return m.id === memberId ? Object.assign({}, m, { name: name, color: color, prefs: prefs }) : m;
+        }) });
+      });
+      render();
+      sb.from('group_members').update({ name: name, color: color, prefs: prefs }).eq('id', memberId).then(function (res) {
+        if (res.error) showToast("儲存失敗,請檢查網路後再試一次");
+      });
+    } else {
+      render();
+      sb.from('group_members').insert({ group_id: groupId, name: name, color: color, prefs: prefs }).select().then(function (res) {
+        if (res.error || !res.data || !res.data[0]) { showToast("新增成員失敗,請檢查網路後再試一次"); return; }
+        var row = res.data[0];
+        state.groups = state.groups.map(function (g) {
+          if (g.id !== groupId) return g;
+          return Object.assign({}, g, { members: g.members.concat([{ id: row.id, name: row.name, color: row.color, prefs: row.prefs || [], linkedUserId: row.linked_user_id }]) });
+        });
+        render();
+      });
+    }
   }
   function deleteMember(groupId, memberId) {
     showConfirm("確定要刪除這個成員嗎?", function () {
@@ -861,7 +891,10 @@
         if (g.id !== groupId) return g;
         return Object.assign({}, g, { members: g.members.filter(function (m) { return m.id !== memberId; }) });
       });
-      persistGroups();
+      render();
+      sb.from('group_members').delete().eq('id', memberId).then(function (res) {
+        if (res.error) showToast("刪除失敗,請檢查網路後再試一次");
+      });
     }, "刪除");
   }
 
