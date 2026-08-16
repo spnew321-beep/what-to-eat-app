@@ -249,6 +249,7 @@
 <body>
 <div id="app"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
 (function () {
   var RKEY = "meal-picker:restaurants:v6";
@@ -317,12 +318,25 @@
 
     toastMsg: "",
     confirmDialog: null,
-    textPromptDialog: null
+    textPromptDialog: null,
+
+    session: null,
+    authReady: false,
+    authView: "login",
+    authForm: { email: "", password: "", confirmPassword: "" },
+    authError: "",
+    authLoading: false
   };
 
   var hasStorage = typeof window !== "undefined" && !!window.storage;
   var ticketNo = Math.floor(Math.random() * 900) + 100;
   var collabTimerHandle = null;
+
+  var SUPABASE_URL = "https://dbzgttrhhrhfryhohnso.supabase.co";
+  var SUPABASE_ANON_KEY = "sb_publishable_2RA4T6-KyaUcLZFXfu23Sw_KA-KuELa";
+  var sb = (window.supabase && window.supabase.createClient)
+    ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    : null;
 
   function uid() { return Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4); }
   function priceLabel(p) { return p ? "$".repeat(p) : "未填價位"; }
@@ -369,6 +383,119 @@
     state.textPromptDialog = null;
     if (v) d.onSubmit(v);
     render();
+  }
+
+  // ---------- auth ----------
+  function initAuth() {
+    if (!sb) { state.authReady = true; render(); return; }
+    sb.auth.getSession().then(function (res) {
+      state.session = res.data && res.data.session ? res.data.session : null;
+      state.authReady = true;
+      render();
+      if (state.session) load();
+    }).catch(function () {
+      state.authReady = true;
+      render();
+    });
+    sb.auth.onAuthStateChange(function (event, session) {
+      var wasLoggedIn = !!state.session;
+      state.session = session;
+      if (!session) {
+        state.restaurants = null; state.groups = null; state.customCategories = null;
+        state.orders = null; state.customPrefs = null; state.history = null;
+      }
+      render();
+      if (session && !wasLoggedIn) load();
+    });
+  }
+  async function signInWithEmail() {
+    if (!sb) { state.authError = "Supabase 尚未設定"; render(); return; }
+    state.authError = ""; state.authLoading = true; render();
+    var res = await sb.auth.signInWithPassword({ email: state.authForm.email.trim(), password: state.authForm.password });
+    state.authLoading = false;
+    if (res.error) { state.authError = res.error.message; render(); }
+  }
+  async function signUpWithEmail() {
+    if (!sb) { state.authError = "Supabase 尚未設定"; render(); return; }
+    if (state.authForm.password !== state.authForm.confirmPassword) { state.authError = "兩次密碼輸入不一致"; render(); return; }
+    state.authError = ""; state.authLoading = true; render();
+    var res = await sb.auth.signUp({ email: state.authForm.email.trim(), password: state.authForm.password });
+    state.authLoading = false;
+    if (res.error) { state.authError = res.error.message; render(); return; }
+    if (!(res.data && res.data.session)) {
+      state.authView = "login";
+      render();
+      showToast("註冊成功,請到信箱收認證信完成驗證");
+    }
+  }
+  async function signInWithGoogle() {
+    if (!sb) { state.authError = "Supabase 尚未設定"; render(); return; }
+    state.authError = "";
+    var res = await sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.href } });
+    if (res.error) { state.authError = res.error.message; render(); }
+  }
+  async function signOut() {
+    if (!sb) return;
+    showConfirm("確定要登出嗎?", async function () { await sb.auth.signOut(); }, "登出");
+  }
+
+  function renderAuthScreen() {
+    var wrap = el("div", { style: "min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;" });
+    var card = el("div", { class: "dialogBox", style: "max-width:360px;" });
+    card.appendChild(el("div", { style: "font-weight:900;font-size:22px;text-align:center;margin-bottom:4px;" }, "這餐吃什麼"));
+    card.appendChild(el("div", { style: "text-align:center;color:#7A7263;font-size:12px;margin-bottom:18px;" }, state.authView === "login" ? "登入" : "註冊新帳號"));
+
+    if (state.authError) {
+      card.appendChild(el("div", { style: "background:#F5D9D5;color:#B23A2E;border-radius:8px;padding:8px 10px;font-size:12.5px;margin-bottom:12px;" }, escapeHtml(state.authError)));
+    }
+
+    var submitFn = state.authView === "login" ? signInWithEmail : signUpWithEmail;
+
+    var updateSubmitDisabled = function () { submitBtn.disabled = state.authLoading || !state.authForm.email.trim() || !state.authForm.password; };
+
+    var emailInput = el("input", { class: "dialogInput", placeholder: "email", type: "email", style: "margin-bottom:10px;" });
+    emailInput.value = state.authForm.email;
+    emailInput.oninput = function (e) { state.authForm.email = e.target.value; updateSubmitDisabled(); };
+    card.appendChild(emailInput);
+
+    var pwInput = el("input", { class: "dialogInput", placeholder: "密碼", type: "password", style: state.authView === "signup" ? "margin-bottom:10px;" : "" });
+    pwInput.value = state.authForm.password;
+    pwInput.oninput = function (e) { state.authForm.password = e.target.value; updateSubmitDisabled(); };
+    pwInput.onkeydown = function (e) { if (e.key === "Enter" && state.authView === "login") { e.preventDefault(); submitFn(); } };
+    card.appendChild(pwInput);
+
+    if (state.authView === "signup") {
+      var pw2Input = el("input", { class: "dialogInput", placeholder: "確認密碼", type: "password" });
+      pw2Input.value = state.authForm.confirmPassword;
+      pw2Input.oninput = function (e) { state.authForm.confirmPassword = e.target.value; };
+      pw2Input.onkeydown = function (e) { if (e.key === "Enter") { e.preventDefault(); submitFn(); } };
+      card.appendChild(pw2Input);
+    }
+
+    var submitBtn = el("button", { class: "submitBtn" }, state.authLoading ? "處理中…" : (state.authView === "login" ? "登入" : "註冊"));
+    submitBtn.disabled = state.authLoading || !state.authForm.email.trim() || !state.authForm.password;
+    submitBtn.onclick = submitFn;
+    card.appendChild(submitBtn);
+
+    card.appendChild(el("div", { style: "text-align:center;color:#7A7263;font-size:11px;margin:14px 0;" }, "或"));
+
+    var googleBtn = el("button", { style: "width:100%;border:1px solid #C9BFA5;background:#FFFDF7;color:#232019;border-radius:8px;padding:11px;font-size:14px;font-weight:700;cursor:pointer;" }, "使用 Google 登入");
+    googleBtn.onclick = signInWithGoogle;
+    card.appendChild(googleBtn);
+
+    var toggleRow = el("div", { style: "text-align:center;margin-top:16px;font-size:12.5px;color:#7A7263;" });
+    var toggleBtn = el("button", { style: "background:none;border:none;color:#5C7A6B;font-weight:700;cursor:pointer;padding:0;font-size:12.5px;" },
+      state.authView === "login" ? "還沒有帳號?註冊" : "已經有帳號?登入");
+    toggleBtn.onclick = function () {
+      state.authView = state.authView === "login" ? "signup" : "login";
+      state.authError = "";
+      render();
+    };
+    toggleRow.appendChild(toggleBtn);
+    card.appendChild(toggleRow);
+
+    wrap.appendChild(card);
+    return wrap;
   }
 
   // ---------- load / persist ----------
@@ -1010,6 +1137,14 @@
   function render() {
     var app = document.getElementById("app");
     app.innerHTML = "";
+    if (!state.authReady) {
+      app.appendChild(el("div", { style: "min-height:100vh;display:flex;align-items:center;justify-content:center;color:#F3ECDD;" }, "載入中…"));
+      return;
+    }
+    if (!state.session) {
+      app.appendChild(renderAuthScreen());
+      return;
+    }
     if (state.restaurants === null || state.groups === null || state.customCategories === null || state.orders === null || state.customPrefs === null) {
       app.appendChild(el("div", { style: "min-height:100vh;display:flex;align-items:center;justify-content:center;color:#F3ECDD;" }, "載入中…"));
       return;
@@ -2124,7 +2259,7 @@
     var items = [
       { key: "privacy", label: "🔒 隱私權政策", ready: false, notReadyMsg: "隱私權政策需要接上正式帳號系統後,依實際蒐集的資料範圍撰寫內容才能上線" },
       { key: "terms", label: "📄 服務條款", ready: false, notReadyMsg: "服務條款需要等正式營運模式(帳號、協作場次規則)確定後才能撰寫" },
-      { key: "account", label: "👤 帳號設定", ready: false, notReadyMsg: "帳號設定需要先接上 Supabase Auth 真帳號系統才能使用" },
+      { key: "account", label: "👤 帳號設定", ready: true },
       { key: "about", label: "ℹ️ 關於這個 App", ready: true },
       { key: "feedback", label: "💬 意見回饋", ready: false, notReadyMsg: "意見回饋需要接上後端才能收集,目前請直接跟開發者反應" }
     ];
@@ -2137,7 +2272,14 @@
         render();
       };
       group.appendChild(row);
-      if (it.ready && state.morePanelOpen === it.key) {
+      if (it.ready && it.key === "account" && state.morePanelOpen === "account") {
+        var accountPanel = el("div", { class: "morePanel" });
+        accountPanel.appendChild(el("div", { style: "margin-bottom:10px;" }, "登入帳號:" + escapeHtml((state.session && state.session.user && state.session.user.email) || "未知")));
+        var signOutBtn = el("button", { class: "ghostBtn" }, "登出");
+        signOutBtn.onclick = signOut;
+        accountPanel.appendChild(signOutBtn);
+        group.appendChild(accountPanel);
+      } else if (it.ready && it.key !== "account" && state.morePanelOpen === it.key) {
         group.appendChild(el("div", { class: "morePanel" }, "這是一個幫家人、朋友、同事一起決定要吃什麼的小工具。目前是原型階段,資料存在這個連結對應的裝置上;之後會接上正式帳號系統與資料庫,讓多人協作、即時同步都能真的運作。"));
       }
     });
@@ -2521,7 +2663,7 @@
   };
 
   try {
-    load();
+    initAuth();
   } catch (e) {
     var appEl2 = document.getElementById("app");
     if (appEl2) appEl2.innerHTML = "<div style='min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#F3ECDD;background:#1B1E24;padding:20px;text-align:center;font-family:sans-serif;'><div style='font-size:16px;margin-bottom:8px;'>頁面發生錯誤</div><div style='font-size:12px;color:#8F97A8;'>" + String(e && e.message ? e.message : e) + "</div></div>";
