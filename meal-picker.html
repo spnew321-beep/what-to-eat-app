@@ -1289,19 +1289,29 @@
     head.appendChild(el("div", { class: "phCount mono" }, state.pool.length + " 間"));
     card.appendChild(head);
 
-    var mrow = el("div", { class: "poolMemberRow" });
-    allCustomTagNames().forEach(function (name) {
-      var count = state.restaurants.filter(function (r) { return (r.customTags || []).indexOf(name) !== -1; }).length;
-      var active = state.spinTagFilter === name;
-      var chip = el("div", { class: "memberChip" + (active ? " active" : "") }, "<span>🏷️ " + escapeHtml(name) + "(" + count + ")</span>");
-      chip.onclick = function () {
-        state.spinTagFilter = active ? null : name;
+    var filterRow = el("div", { style: "display:flex;gap:8px;align-items:center;flex-wrap:wrap;" });
+    var spinTagNames = allCustomTagNames();
+    if (spinTagNames.length > 0) {
+      var tagSelect = el("select", {});
+      tagSelect.style.cssText = "border:1px solid #3A3F4C;background:#20232B;color:#F3ECDD;border-radius:999px;padding:7px 13px;font-size:13px;";
+      tagSelect.appendChild(el("option", { value: "全部" }, "全部標籤"));
+      spinTagNames.forEach(function (name) {
+        var count = state.restaurants.filter(function (r) { return (r.customTags || []).indexOf(name) !== -1; }).length;
+        var opt = el("option", { value: name }, escapeHtml(name) + "(" + count + ")");
+        if (state.spinTagFilter === name) opt.setAttribute("selected", "selected");
+        tagSelect.appendChild(opt);
+      });
+      tagSelect.onchange = function (e) {
+        state.spinTagFilter = e.target.value === "全部" ? null : e.target.value;
         if (state.spinTagFilter) state.browseOpen = true;
         render();
       };
-      mrow.appendChild(chip);
-    });
-    card.appendChild(mrow);
+      filterRow.appendChild(tagSelect);
+    }
+    var browseBtn = el("button", { class: "ghostBtn" }, state.browseOpen ? "收合列表 ▲" : "全部店家 ▾");
+    browseBtn.onclick = function () { state.browseOpen = !state.browseOpen; if (!state.browseOpen) state.spinTagFilter = null; render(); };
+    filterRow.appendChild(browseBtn);
+    card.appendChild(filterRow);
 
     if (state.pool.length > 0) {
       var pills = el("div", { class: "selectedPillsRow" });
@@ -1314,10 +1324,6 @@
       });
       card.appendChild(pills);
     }
-
-    var browseBtn = el("button", { class: "ghostBtn", style: "margin-top:12px" }, state.browseOpen ? "收合店家列表 ▲" : "顯示所有店家 ▾");
-    browseBtn.onclick = function () { state.browseOpen = !state.browseOpen; if (!state.browseOpen) state.spinTagFilter = null; render(); };
-    card.appendChild(browseBtn);
 
     if (state.browseOpen) {
       var spinBrowseSource = state.spinTagFilter
@@ -1599,23 +1605,30 @@
     card.appendChild(head);
 
     var quickTagNames = allCustomTagNames();
+    var collabFilterRow = el("div", { style: "display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;" });
     if (quickTagNames.length > 0) {
-      var mrow = el("div", { class: "poolMemberRow" });
+      var collabTagSelect = el("select", {});
+      collabTagSelect.style.cssText = "border:1px solid #3A3F4C;background:#20232B;color:#F3ECDD;border-radius:999px;padding:7px 13px;font-size:13px;";
+      collabTagSelect.appendChild(el("option", { value: "全部" }, "全部標籤"));
       quickTagNames.forEach(function (name) {
         var count = state.restaurants.filter(function (r) { return (r.customTags || []).indexOf(name) !== -1; }).length;
-        var active = state.collab.tagFilter === name;
-        var chip = el("div", { class: "memberChip" + (active ? " active" : "") }, "<span>🏷️ " + escapeHtml(name) + "(" + count + ")</span>");
-        chip.onclick = function () {
-          state.collab.tagFilter = active ? null : name;
-          if (state.collab.tagFilter) state.collab.browseOpen = true;
-          render();
-        };
-        mrow.appendChild(chip);
+        var opt = el("option", { value: name }, escapeHtml(name) + "(" + count + ")");
+        if (state.collab.tagFilter === name) opt.setAttribute("selected", "selected");
+        collabTagSelect.appendChild(opt);
       });
-      card.appendChild(mrow);
+      collabTagSelect.onchange = function (e) {
+        state.collab.tagFilter = e.target.value === "全部" ? null : e.target.value;
+        if (state.collab.tagFilter) state.collab.browseOpen = true;
+        render();
+      };
+      collabFilterRow.appendChild(collabTagSelect);
     } else {
-      card.appendChild(el("div", { class: "excludeNote" }, "還沒有自訂標籤可以篩選候選,直接從下面清單挑選,或臨時新增店家"));
+      collabFilterRow.appendChild(el("div", { class: "excludeNote", style: "margin:0" }, "還沒有自訂標籤可以篩選候選"));
     }
+    var collabBrowseBtn = el("button", { class: "ghostBtn" }, state.collab.browseOpen ? "收合列表 ▲" : "全部店家 ▾");
+    collabBrowseBtn.onclick = function () { state.collab.browseOpen = !state.collab.browseOpen; if (!state.collab.browseOpen) state.collab.tagFilter = null; render(); };
+    collabFilterRow.appendChild(collabBrowseBtn);
+    card.appendChild(collabFilterRow);
 
     if (state.collab.pool.length > 0) {
       var isVoteFirst = state.collab.decisionMode === "vote_first";
@@ -1665,9 +1678,6 @@
     adhocWrap.appendChild(adhocRow);
     card.appendChild(adhocWrap);
 
-    var browseBtn = el("button", { class: "ghostBtn", style: "margin-top:12px" }, state.collab.browseOpen ? "收合店家列表 ▲" : "顯示所有店家 ▾");
-    browseBtn.onclick = function () { state.collab.browseOpen = !state.collab.browseOpen; if (!state.collab.browseOpen) state.collab.tagFilter = null; render(); };
-    card.appendChild(browseBtn);
     if (state.collab.browseOpen) {
       var linkedIds = state.collab.pool.filter(function (i) { return !i.isAdhoc; }).map(function (i) { return i.restaurantId; });
       var collabBrowseSource = state.collab.tagFilter
