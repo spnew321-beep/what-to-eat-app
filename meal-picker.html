@@ -1551,9 +1551,7 @@
       var favBtn = el("button", { class: "iconBtn fav" + (r.favorite ? " active" : "") }, r.favorite ? "★" : "☆");
       favBtn.onclick = function (e) { e.stopPropagation(); toggleFavorite(r.id); };
       row.appendChild(favBtn);
-      var editBtn = el("button", { class: "iconBtn" }, "✎");
-      editBtn.onclick = function (e) { e.stopPropagation(); openRestaurantModal(null, r); };
-      row.appendChild(editBtn);
+      if (r.menuItems && r.menuItems.length) row.appendChild(el("span", { class: "iconBtn" }, "🍽️"));
       var delBtn = el("button", { class: "iconBtn" }, "🗑");
       delBtn.onclick = function (e) { e.stopPropagation(); removeRestaurant(r.id); };
       row.appendChild(delBtn);
