@@ -1202,9 +1202,9 @@
     collabPollActive();
   }
   var collabPollCounter = 0;
-  function isTypingText() {
+  function isFormFieldFocused() {
     var el = document.activeElement;
-    return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA");
+    return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT");
   }
   function collabActiveTick() {
     if (state.collab.step !== "active") { clearInterval(collabTimerHandle); collabTimerHandle = null; return; }
@@ -1216,7 +1216,7 @@
     }
     collabPollCounter++;
     if (collabPollCounter % 3 === 0) collabPollActive();
-    if (!isTypingText()) render();
+    if (!isFormFieldFocused()) render();
   }
   function mapPoolItem(item) {
     var r = item.restaurant_id ? restaurantById(item.restaurant_id) : null;
@@ -1248,7 +1248,7 @@
           return { id: p.id, name: p.display_name, color: PERSON_COLORS[idx % PERSON_COLORS.length], isGuest: p.is_guest, ready: p.ready };
         });
       }
-      if (!isTypingText()) render();
+      if (!isFormFieldFocused()) render();
     });
   }
   function collabToggleRestaurant(restaurantId) {
@@ -3019,7 +3019,7 @@
         renderGuest();
         return;
       }
-      if (!isTypingText()) renderGuest();
+      if (!isFormFieldFocused()) renderGuest();
     });
   }
   function guestVote(poolItemId, accepted) {
