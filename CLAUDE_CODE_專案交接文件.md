@@ -1,6 +1,6 @@
 # 這餐吃什麼 — Claude Code 專案交接文件 v6
 
-> **v6 更新重點**:Tier 2(接 Supabase)已經在同一個對話串裡做完,不再是規劃——這份文件從「還沒做,以下是設計」改成「已經這樣做了,以下是實況」。真正接上的部分:Supabase 專案建立、v5 schema/RLS 全部跑上真資料庫、Auth(email/password + Google OAuth)、五個核心資料實體(餐廳/群組/自訂類型與偏好/決策歷史/點餐)全部改讀寫真資料庫、**協作場次的真邀請連結**(訪客不用帳號,靠 `guest-session` Edge Function + token 驗證加入/投票/新增候選)、**排程結算/清理**(`settle-sessions` Edge Function + `pg_cron`,每分鐘自動跑,不需要任何人開著頁面)全部做完並實測過。還沒做的只剩:把 app 部署到真的網址(邀請連結目前只能同一台電腦開,Google OAuth 也被這件事卡住)。詳細現況見第 3、5、6、9 節。
+> **v6 更新重點**:Tier 2(接 Supabase)已經在同一個對話串裡做完,不再是規劃——這份文件從「還沒做,以下是設計」改成「已經這樣做了,以下是實況」。真正接上的部分:Supabase 專案建立、v5 schema/RLS 全部跑上真資料庫、Auth(email/password + Google OAuth)、五個核心資料實體(餐廳/群組/自訂類型與偏好/決策歷史/點餐)全部改讀寫真資料庫、**協作場次的真邀請連結**(訪客不用帳號,靠 `guest-session` Edge Function + token 驗證加入/投票/新增候選)、**排程結算/清理**(`settle-sessions` Edge Function + `pg_cron`,每分鐘自動跑,不需要任何人開著頁面)、**部署到真網址**(Netlify,`https://frolicking-buttercream-a3f848.netlify.app`)全部做完並實測過。Tier 4(正式部署)因此提前完成,原本卡在「還是本機檔案」的 Google OAuth、跨裝置邀請連結現在都應該能用了(Google OAuth 待使用者用真的 Google 帳號實測確認)。詳細現況見第 3、5、6、9 節。
 >
 > v2 新增了完整的「資料生命週期審查」(見第 8 節)。v3 一度把「成員標籤(people)」整個概念拿掉、併入「自訂標籤(tags)」——**這個決定在 v4 被推翻**,復原成「成員」跟「自訂標籤」兩套獨立系統。v4.2 拿掉了成員與餐廳之間唯一的連結(`restaurant_tags`)。v4.3 把「群組」的假資料機制整個拿掉,改成「👥 群組」分頁全部鎖住、家人飲食偏好小抄搬去 ☰ 更多獨立存在。**v5 再翻一次案,把群組做成真的能用的功能**,但用一個新方式解決 v4.3 當時卡住的問題:
 >
@@ -69,8 +69,10 @@
 
 > **狀態更新(v6)**:v5 只做完前端 UI(假資料/`window.storage`)。這次更新把帳號系統、五個核心資料實體、協作場次的真邀請連結全部接上真的 Supabase 專案。下面的清單是**目前真的能動、有真資料庫在背後撐著的狀態**,不再是「畫面預覽」。
 
+**app 已部署到真的網址**:`https://frolicking-buttercream-a3f848.netlify.app`(Netlify,drag-and-drop 部署,免費版隨機子網域)。Supabase Auth 的 Site URL / Redirect URLs 已經指向這個網址,不再是本機 `file://` 路徑。
+
 已經接上真資料庫、端到端測過的部分:
-- **帳號系統**:email/password 登入註冊 + Google OAuth(OAuth 目前只能在部署成真網址、或本機起 `http://localhost` 網頁伺服器的情況下用,直接雙擊開檔案會被瀏覽器的 `ERR_UNSAFE_REDIRECT` 擋掉——這是瀏覽器擋 https→file 重新導向的安全機制,不是設定問題)
+- **帳號系統**:email/password 登入註冊(已測過,部署後 session 用真的 `localStorage` 持久化,重新整理不會被登出)+ Google OAuth(設定已對應新網址,實際登入流程待使用者用真帳號測試確認)
 - 5 個分頁:🗺️ 地圖(內含左右切換的「地圖／收藏」)・👥 群組・🎯 決策・🧾 點餐・☰ 更多,登入後資料全部從 Supabase 讀
 - 餐廳收藏(CRUD、地圖定位板、食物類型/自訂標籤下拉篩選)、自訂標籤(自由文字)、菜單存放區(常點餐點+價格)、菜單照片(**真的存 Supabase Storage**,長期保存,列表上有 🍴 圖示可以不進編輯頁直接放大看)
 - 👥 群組分頁:群組/member 的 CRUD 全部是真資料庫操作(`groups`/`group_members`);`linked_user_id` 欄位存在但**還沒有實際連結流程**,恆為 null,徽章顯示恆為「未連結」——這件事還沒做(見下方待辦)
@@ -81,7 +83,6 @@
 - 決策結果輸出分享圖片(純 Canvas 繪製,不需要後端)
 
 **還沒做、需要接手者繼續的部分**:
-- **把 app 部署到真的網址**(Vercel/Netlify 之類):目前還是本機 `file://` 檔案,邀請連結只能同一台電腦上的不同分頁互開,無法真的分享給不同裝置的人。這也是 Google OAuth 目前用不了的同一個根因——**這是現在最重要的殘留項**,排程結算/清理已經在 v6 做完了
 - `group_members.linked_user_id` 真的能連結(「連結帳號」目前還是 UI 上的「尚未開放」提示)
 - 「群組邀點餐」「連結發點餐」的多裝置各自輸入(目前落地在跟自建成員清單一樣的畫面,單機代填)——**可以參考這次協作場次邀請連結的做法**(`guest-session` Edge Function 的 token 驗證模式)直接套用,不需要重新設計
 - 隱私權政策/服務條款/意見回饋(各自有客製化的「尚未開放」提示文字)
@@ -454,9 +455,9 @@ Tier 2 如果要做到「群組邀點餐/連結發點餐」真的多裝置各自
 | **Tier 2(接 Supabase)** | 真帳號(Auth:email/password + Google OAuth)、真資料庫(第 5 節 schema 全部跑上真專案)、五個核心資料實體真的讀寫、**協作場次真邀請連結**(`guest-session` Edge Function,訪客不用帳號)、**排程結算/清理**(`settle-sessions` Edge Function + `pg_cron`,每分鐘自動跑) | ✅ **完成(v6)**,細節見第 3、6 節 |
 | Tier 2 殘留項 | `linked_user_id` 真的能連結、群組邀點餐/連結發點餐的多裝置各自輸入(可套用 guest-session 的 token 驗證模式) | 🔜 下一步 |
 | Tier 3 | 拍照記錄三餐、AI 估算熱量、依歷史自動排除重複類型 | 未來 |
-| Tier 4 | 正式部署(Vercel/Netlify),取得正式網址——**這件事其實比 Tier 3 更急**,因為邀請連結、Google OAuth 目前都被「還是本機檔案」卡住,見第 3 節 | 未來,但優先順序應該提前 |
+| Tier 4 | 正式部署,取得正式網址 | ✅ **完成(v6)**,Netlify,`https://frolicking-buttercream-a3f848.netlify.app`,細節見第 3 節 |
 
-**為什麼選 Supabase**:關聯式資料庫對應「帳號→群組/餐廳→決策場次/點餐」的關聯結構;內建 Auth 解決帳號(也是 `linked_user_id` 能真的動起來的前提);Scheduled Functions/`pg_cron` 解決第 8 節的逾時排程需求(**還沒接**,見上方 Tier 2 殘留項),不用另外架服務。免費層額度(500MB DB、5 萬月活躍用戶)對這個規模綽綽有餘,唯一要注意免費專案連續 7 天沒存取會自動暫停(資料還在,手動喚醒即可)。
+**為什麼選 Supabase**:關聯式資料庫對應「帳號→群組/餐廳→決策場次/點餐」的關聯結構;內建 Auth 解決帳號(也是 `linked_user_id` 能真的動起來的前提);Scheduled Functions/`pg_cron` 解決第 8 節的逾時排程需求,不用另外架服務。免費層額度(500MB DB、5 萬月活躍用戶)對這個規模綽綽有餘,唯一要注意免費專案連續 7 天沒存取會自動暫停(資料還在,手動喚醒即可)。
 
 **v6 補充**:原本規劃協作場次/點餐的多裝置同步要用 Supabase Realtime,實際做 `guest-session` 時**改用輪詢(每 3 秒 poll 一次)**,不是 Realtime 訂閱——因為 RLS 設計是 owner-only,訪客是匿名角色,沒辦法直接訂閱 Realtime channel(那需要通過 RLS 的角色權限),要嘛開放匿名 RLS(不符合第 5 節的安全設計),要嘛簽發限定範圍的自訂 JWT(複雜度高,對這個規模不划算)。輪詢對這個使用情境(場次通常幾分鐘到幾小時,不需要毫秒級即時)已經夠用,之後如果真的想換成 Realtime,需要重新設計訪客端的授權模式,不是換個 API 呼叫就好。
 
