@@ -78,6 +78,8 @@ async function settleOne(session: any) {
     .update({
       status: "done",
       winner_restaurant_id: winner.isAdhoc ? null : winner.restaurantId,
+      winner_name: winner.name,
+      winner_category: winner.category,
       cleanup_after: cleanupAfter,
     })
     .eq("id", session.id);

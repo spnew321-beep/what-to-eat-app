@@ -1357,6 +1357,8 @@
       sb.from('decision_sessions').update({
         status: 'done',
         winner_restaurant_id: item.isAdhoc ? null : item.restaurantId,
+        winner_name: item.name,
+        winner_category: item.category,
         cleanup_after: new Date(Date.now() + 60 * 60 * 1000).toISOString()
       }).eq('id', state.collab.sessionId).then(function (res) {
         if (res.error) showToast("場次紀錄更新失敗(不影響已產生的結果)");

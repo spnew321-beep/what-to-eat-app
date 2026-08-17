@@ -89,13 +89,16 @@ Deno.serve(async (req) => {
       .order("joined_at", { ascending: true });
 
     let winner = null;
-    if (session.winner_restaurant_id) {
-      const { data: r } = await admin
-        .from("restaurants")
-        .select("name, category, price")
-        .eq("id", session.winner_restaurant_id)
-        .maybeSingle();
-      winner = r;
+    if (session.status === "done") {
+      winner = { name: session.winner_name, category: session.winner_category, price: null };
+      if (session.winner_restaurant_id) {
+        const { data: r } = await admin
+          .from("restaurants")
+          .select("price")
+          .eq("id", session.winner_restaurant_id)
+          .maybeSingle();
+        if (r) winner.price = r.price;
+      }
     }
 
     return json({
