@@ -1311,7 +1311,10 @@
       state.collab.winner = null;
       render();
       if (state.collab.sessionId) {
-        sb.from('decision_sessions').update({ status: 'no_result' }).eq('id', state.collab.sessionId).then(function (res) {
+        sb.from('decision_sessions').update({
+          status: 'no_result',
+          cleanup_after: new Date(Date.now() + 60 * 60 * 1000).toISOString()
+        }).eq('id', state.collab.sessionId).then(function (res) {
           if (res.error) showToast("場次紀錄更新失敗");
         });
       }
@@ -1349,7 +1352,8 @@
     if (state.collab.sessionId) {
       sb.from('decision_sessions').update({
         status: 'done',
-        winner_restaurant_id: item.isAdhoc ? null : item.restaurantId
+        winner_restaurant_id: item.isAdhoc ? null : item.restaurantId,
+        cleanup_after: new Date(Date.now() + 60 * 60 * 1000).toISOString()
       }).eq('id', state.collab.sessionId).then(function (res) {
         if (res.error) showToast("場次紀錄更新失敗(不影響已產生的結果)");
       });
