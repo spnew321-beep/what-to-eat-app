@@ -3049,7 +3049,7 @@
       card.appendChild(el("div", { style: "font-weight:900;font-size:18px;margin-bottom:10px;" }, "輸入你的名字加入場次"));
       var nameInput = el("input", { class: "dialogInput" });
       nameInput.value = guestState.name;
-      nameInput.oninput = function (e) { guestState.name = e.target.value; };
+      nameInput.oninput = function (e) { guestState.name = e.target.value; joinBtn.disabled = guestState.loading || !guestState.name.trim(); };
       nameInput.onkeydown = function (e) { if (e.key === "Enter") { e.preventDefault(); guestJoin(); } };
       card.appendChild(nameInput);
       var joinBtn = el("button", { class: "submitBtn", style: "margin-top:10px;" }, guestState.loading ? "加入中…" : "加入");
