@@ -2369,9 +2369,11 @@
     if (state.orderFlow.pickSource === "history") {
       var seen = {}; source = [];
       state.history.forEach(function (h) {
-        if (!h.restaurantId || seen[h.restaurantId]) return;
-        var r = state.restaurants.filter(function (x) { return x.id === h.restaurantId; })[0];
-        if (r) { seen[h.restaurantId] = true; source.push(r); }
+        var key = h.restaurantId || ("adhoc:" + h.name + "|" + h.category);
+        if (seen[key]) return;
+        seen[key] = true;
+        var r = h.restaurantId ? state.restaurants.filter(function (x) { return x.id === h.restaurantId; })[0] : null;
+        source.push(r || { id: h.restaurantId || null, name: h.name, category: h.category, price: null });
       });
     } else {
       source = state.restaurants;
