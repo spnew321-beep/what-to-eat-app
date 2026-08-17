@@ -1,6 +1,6 @@
 # 這餐吃什麼 — Claude Code 專案交接文件 v6
 
-> **v6 更新重點**:Tier 2(接 Supabase)已經在同一個對話串裡做完大半,不再是規劃——這份文件從「還沒做,以下是設計」改成「已經這樣做了,以下是實況」。真正接上的部分:Supabase 專案建立、v5 schema/RLS 全部跑上真資料庫、Auth(email/password + Google OAuth)、五個核心資料實體(餐廳/群組/自訂類型與偏好/決策歷史/點餐)全部改讀寫真資料庫、`decision_sessions` 真的能存(owner 端)、**協作場次的真邀請連結也做完了**(訪客不用帳號,靠 `guest-session` Edge Function + token 驗證加入/投票/新增候選)。還沒做的只剩：排程結算/清理(場次逾時目前只靠前端輪詢偵測,沒有伺服器端保底)、把 app 部署到真的網址(邀請連結目前只能同一台電腦開)。詳細現況見第 3、5、6、9 節。
+> **v6 更新重點**:Tier 2(接 Supabase)已經在同一個對話串裡做完,不再是規劃——這份文件從「還沒做,以下是設計」改成「已經這樣做了,以下是實況」。真正接上的部分:Supabase 專案建立、v5 schema/RLS 全部跑上真資料庫、Auth(email/password + Google OAuth)、五個核心資料實體(餐廳/群組/自訂類型與偏好/決策歷史/點餐)全部改讀寫真資料庫、**協作場次的真邀請連結**(訪客不用帳號,靠 `guest-session` Edge Function + token 驗證加入/投票/新增候選)、**排程結算/清理**(`settle-sessions` Edge Function + `pg_cron`,每分鐘自動跑,不需要任何人開著頁面)全部做完並實測過。還沒做的只剩:把 app 部署到真的網址(邀請連結目前只能同一台電腦開,Google OAuth 也被這件事卡住)。詳細現況見第 3、5、6、9 節。
 >
 > v2 新增了完整的「資料生命週期審查」(見第 8 節)。v3 一度把「成員標籤(people)」整個概念拿掉、併入「自訂標籤(tags)」——**這個決定在 v4 被推翻**,復原成「成員」跟「自訂標籤」兩套獨立系統。v4.2 拿掉了成員與餐廳之間唯一的連結(`restaurant_tags`)。v4.3 把「群組」的假資料機制整個拿掉,改成「👥 群組」分頁全部鎖住、家人飲食偏好小抄搬去 ☰ 更多獨立存在。**v5 再翻一次案,把群組做成真的能用的功能**,但用一個新方式解決 v4.3 當時卡住的問題:
 >
@@ -75,14 +75,13 @@
 - 餐廳收藏(CRUD、地圖定位板、食物類型/自訂標籤下拉篩選)、自訂標籤(自由文字)、菜單存放區(常點餐點+價格)、菜單照片(**真的存 Supabase Storage**,長期保存,列表上有 🍴 圖示可以不進編輯頁直接放大看)
 - 👥 群組分頁:群組/member 的 CRUD 全部是真資料庫操作(`groups`/`group_members`);`linked_user_id` 欄位存在但**還沒有實際連結流程**,恆為 null,徽章顯示恆為「未連結」——這件事還沒做(見下方待辦)
 - 自訂食物類型、自訂飲食偏好(`custom_categories`/`custom_prefs`):改名/刪除會連動批次更新用到的餐廳/成員資料,真資料庫操作
-- 決策:個人抽籤、系統建議會寫入 `decision_history`;**協作場次現在有真的邀請連結**——owner 建立場次時產生真 `invite_token`,訪客不用帳號、透過連結呼叫 `guest-session` Edge Function 就能加入、投票、新增候選、標記完成,owner 端每 3 秒 poll 一次同步訪客的操作,截止時間到會自動結算並寫入 `decision_history`(結算判斷邏輯本身沒變,見第 6 節)
+- 決策:個人抽籤、系統建議會寫入 `decision_history`;**協作場次現在有真的邀請連結**——owner 建立場次時產生真 `invite_token`,訪客不用帳號、透過連結呼叫 `guest-session` Edge Function 就能加入、投票、新增候選、標記完成,owner 端每 3 秒 poll 一次同步訪客的操作;**逾時結算跟過期清理也接上真排程了**(`settle-sessions` Edge Function + `pg_cron`,每分鐘自動跑一次,不需要任何人開著頁面,見第 6 節)
 - 🧾 點餐分頁:「自建成員清單」模式是真資料庫操作(`orders`/`order_items`),「從群組匯入成員」也是真的
 - ☰ 更多分頁的「自訂標籤管理」「食物類型管理」都是真資料庫操作
 - 決策結果輸出分享圖片(純 Canvas 繪製,不需要後端)
 
 **還沒做、需要接手者繼續的部分**:
-- **排程結算/清理**(第 6 節「逾時觸發機制」的 A 保底):目前只有前端輪詢偵測(B),沒有伺服器端的 Scheduled Function/`pg_cron`。代表如果所有人都關掉分頁,已經到期的場次不會自動結算,也不會有東西幫忙清除過期場次(`cleanup_after` 這個機制還沒實作)
-- **把 app 部署到真的網址**(Vercel/Netlify 之類):目前還是本機 `file://` 檔案,邀請連結只能同一台電腦上的不同分頁互開,無法真的分享給不同裝置的人。這也是 Google OAuth 目前用不了的同一個根因
+- **把 app 部署到真的網址**(Vercel/Netlify 之類):目前還是本機 `file://` 檔案,邀請連結只能同一台電腦上的不同分頁互開,無法真的分享給不同裝置的人。這也是 Google OAuth 目前用不了的同一個根因——**這是現在最重要的殘留項**,排程結算/清理已經在 v6 做完了
 - `group_members.linked_user_id` 真的能連結(「連結帳號」目前還是 UI 上的「尚未開放」提示)
 - 「群組邀點餐」「連結發點餐」的多裝置各自輸入(目前落地在跟自建成員清單一樣的畫面,單機代填)——**可以參考這次協作場次邀請連結的做法**(`guest-session` Edge Function 的 token 驗證模式)直接套用,不需要重新設計
 - 隱私權政策/服務條款/意見回饋(各自有客製化的「尚未開放」提示文字)
@@ -372,9 +371,10 @@ create table order_items (
 10. 緩衝時間過後,由排程任務整個刪除場次(參與者/候選/表態全部隨 CASCADE 一併清除)
 ```
 
-### 逾時觸發機制(A+B 雙保險,已定案;**v6:只有 B 做出來了,A 還沒做**)
-- **A(排程保底)—— ⚠️ 還沒實作**:規劃是 Supabase Scheduled Function,每 1 分鐘掃描一次 `decision_sessions`,找出 `status in ('collecting','waiting') and deadline_at <= now()` 的場次,依上方第 8 步結算;同時掃描 `status in ('done','no_result') and cleanup_after <= now()` 的場次執行刪除。**目前完全沒有這一層**,代表如果所有人都關掉分頁,已經到期的場次會卡在 `collecting` 狀態不會自動結算,`cleanup_after` 這個欄位目前也沒有任何東西在讀它。這是 Tier 2 剩下最重要的一塊,見第 9 節路線圖。
-- **B(前端主動檢查)—— ✅ 已實作**:owner 開著場次進行中畫面時,前端每秒檢查一次是否已超過 `deadline_at`,超過就在瀏覽器端呼叫結算邏輯(`collabSettle()`),同時每 3 秒 poll 一次 `session_pool`/`session_votes`/`session_participants` 同步訪客的操作。這代表**目前只有「owner 剛好開著頁面」的情況會準時結算**,單純 B 沒有 A 保底,不能算是完整方案。
+### 逾時觸發機制(A+B 雙保險,已定案;**v6:A、B 都做完了**)
+- **A(排程保底)—— ✅ 已實作**:`supabase/functions/settle-sessions/index.ts`,每次呼叫掃描一次 `decision_sessions`,找出 `status='collecting' and deadline_at <= now()` 的場次結算(邏輯跟前端 `collabSettle()` 一致:候選 0 間 = `no_result`;`vote_first` 模式篩掉有人不接受的、全部被否決則退回完整候選名單;剩下的候選隨機挑一個當贏家、寫入 `decision_history`);同時掃描 `status in ('done','no_result') and cleanup_after <= now()` 的場次整個刪除(CASCADE 一併清掉參與者/候選/表態)。排程方式:Supabase Dashboard → Integrations → Cron(裝 `pg_cron` 擴充功能)→ Jobs → Create → Type 選 **Supabase Edge Function**(需要額外裝 `pg_net` 擴充功能,UI 上會提示)→ Schedule 選 **Every minute**(`* * * * *`)→ Edge Function 選 `settle-sessions` → Headers 加 `Authorization: Bearer <anon key>` 跟 `apikey: <anon key>`(Timeout 欄位上限 5000ms)。已建立排程名為 `settle-sessions-cron`,實測過真的會在每分鐘整點自動觸發、不需要任何人開著頁面。
+- **B(前端主動檢查)—— ✅ 已實作**:owner 開著場次進行中畫面時,前端每秒檢查一次是否已超過 `deadline_at`,超過就在瀏覽器端呼叫結算邏輯(`collabSettle()`),同時每 3 秒 poll 一次 `session_pool`/`session_votes`/`session_participants` 同步訪客的操作,讓「剛好有人在看」的情況比排程的下一次執行更即時反應。
+- 補充:`settle-sessions` 需要 `service_role` 對 `decision_history` 有 `select, insert` 權限,這是 `20260817000001_v5_settle_grants.sql` 這個 migration 的用途,同一類 GRANT 坑,見上方第 5 節說明。
 
 ### 點餐流程(v5 新增)
 
@@ -451,8 +451,8 @@ Tier 2 如果要做到「群組邀點餐/連結發點餐」真的多裝置各自
 | Tier 1 | 協作場次 UI 全部蓋完,未串接後端功能先做空按鈕 | ✅ 已完成 |
 | Tier 1.5 | UI/UX 檢視與優化(編輯功能補完、協作場次畫面重構、一致性修正) | ✅ 已完成 |
 | Tier 1.6 | 群組/member 復活(已連結/未連結狀態)、地圖收藏合併、新增點餐分頁 | ✅ 已完成(v5) |
-| **Tier 2(接 Supabase)** | 真帳號(Auth:email/password + Google OAuth)、真資料庫(第 5 節 schema 全部跑上真專案)、五個核心資料實體真的讀寫、**協作場次真邀請連結**(`guest-session` Edge Function,訪客不用帳號) | ✅ **大部分完成(v6)**,細節見第 3 節 |
-| Tier 2 殘留項 | 排程結算/清理(第 6 節機制 A,伺服器端保底)、`linked_user_id` 真的能連結、群組邀點餐/連結發點餐的多裝置各自輸入(可套用 guest-session 的 token 驗證模式) | 🔜 下一步 |
+| **Tier 2(接 Supabase)** | 真帳號(Auth:email/password + Google OAuth)、真資料庫(第 5 節 schema 全部跑上真專案)、五個核心資料實體真的讀寫、**協作場次真邀請連結**(`guest-session` Edge Function,訪客不用帳號)、**排程結算/清理**(`settle-sessions` Edge Function + `pg_cron`,每分鐘自動跑) | ✅ **完成(v6)**,細節見第 3、6 節 |
+| Tier 2 殘留項 | `linked_user_id` 真的能連結、群組邀點餐/連結發點餐的多裝置各自輸入(可套用 guest-session 的 token 驗證模式) | 🔜 下一步 |
 | Tier 3 | 拍照記錄三餐、AI 估算熱量、依歷史自動排除重複類型 | 未來 |
 | Tier 4 | 正式部署(Vercel/Netlify),取得正式網址——**這件事其實比 Tier 3 更急**,因為邀請連結、Google OAuth 目前都被「還是本機檔案」卡住,見第 3 節 | 未來,但優先順序應該提前 |
 
@@ -468,6 +468,7 @@ Tier 2 如果要做到「群組邀點餐/連結發點餐」真的多裝置各自
 - `CLAUDE_CODE_專案交接文件.md`(本文件)— 資料庫、帳號、排程、路線圖、第 8 節生命週期審查
 - `supabase/migrations/*.sql` — **已經在真專案上執行過**的 SQL,照檔名時間序執行可重建整個資料庫,清單見第 5 節
 - `supabase/functions/guest-session/index.ts` — **已部署**的 Edge Function,協作場次訪客邀請連結的後端邏輯,見第 5 節說明
+- `supabase/functions/settle-sessions/index.ts` — **已部署 + 已排程**(`pg_cron`,每分鐘一次)的 Edge Function,場次逾時結算/過期清理,見第 6 節說明
 - `補充-UIUX優化定案.md` — UI/UX 檢視問題清單與定案結果,已全部做進原型
 - `補充-食物類型擴充定案.md` — 食物類型可自訂擴充的定案結果
 
