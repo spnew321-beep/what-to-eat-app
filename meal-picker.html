@@ -1202,6 +1202,10 @@
     collabPollActive();
   }
   var collabPollCounter = 0;
+  function isTypingText() {
+    var el = document.activeElement;
+    return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA");
+  }
   function collabActiveTick() {
     if (state.collab.step !== "active") { clearInterval(collabTimerHandle); collabTimerHandle = null; return; }
     if (state.confirmDialog || state.textPromptDialog) return;
@@ -1212,7 +1216,7 @@
     }
     collabPollCounter++;
     if (collabPollCounter % 3 === 0) collabPollActive();
-    render();
+    if (!isTypingText()) render();
   }
   function mapPoolItem(item) {
     var r = item.restaurant_id ? restaurantById(item.restaurant_id) : null;
@@ -1244,7 +1248,7 @@
           return { id: p.id, name: p.display_name, color: PERSON_COLORS[idx % PERSON_COLORS.length], isGuest: p.is_guest, ready: p.ready };
         });
       }
-      render();
+      if (!isTypingText()) render();
     });
   }
   function collabToggleRestaurant(restaurantId) {
@@ -3010,10 +3014,12 @@
       guestState.pool = r.body.pool;
       guestState.participants = r.body.participants;
       guestState.me = r.body.me;
-      if (guestState.session.status !== "collecting" && guestState.pollHandle) {
-        clearInterval(guestState.pollHandle); guestState.pollHandle = null;
+      if (guestState.session.status !== "collecting") {
+        if (guestState.pollHandle) { clearInterval(guestState.pollHandle); guestState.pollHandle = null; }
+        renderGuest();
+        return;
       }
-      renderGuest();
+      if (!isTypingText()) renderGuest();
     });
   }
   function guestVote(poolItemId, accepted) {
