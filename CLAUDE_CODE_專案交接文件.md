@@ -1,6 +1,8 @@
-# 這餐吃什麼 — Claude Code 專案交接文件 v5
+# 這餐吃什麼 — Claude Code 專案交接文件 v6
 
-> 這份文件取代先前版本。v2 新增了完整的「資料生命週期審查」(見第 8 節)。v3 一度把「成員標籤(people)」整個概念拿掉、併入「自訂標籤(tags)」——**這個決定在 v4 被推翻**,復原成「成員」跟「自訂標籤」兩套獨立系統。v4.2 拿掉了成員與餐廳之間唯一的連結(`restaurant_tags`)。v4.3 把「群組」的假資料機制整個拿掉,改成「👥 群組」分頁全部鎖住、家人飲食偏好小抄搬去 ☰ 更多獨立存在。**v5 再翻一次案,把群組做成真的能用的功能**,但用一個新方式解決 v4.3 當時卡住的問題:
+> **v6 更新重點**:Tier 2(接 Supabase)已經在同一個對話串裡做完大半,不再是規劃——這份文件從「還沒做,以下是設計」改成「已經這樣做了,以下是實況」。真正接上的部分:Supabase 專案建立、v5 schema/RLS 全部跑上真資料庫、Auth(email/password + Google OAuth)、五個核心資料實體(餐廳/群組/自訂類型與偏好/決策歷史/點餐)全部改讀寫真資料庫、`decision_sessions` 真的能存(owner 端)、**協作場次的真邀請連結也做完了**(訪客不用帳號,靠 `guest-session` Edge Function + token 驗證加入/投票/新增候選)。還沒做的只剩：排程結算/清理(場次逾時目前只靠前端輪詢偵測,沒有伺服器端保底)、把 app 部署到真的網址(邀請連結目前只能同一台電腦開)。詳細現況見第 3、5、6、9 節。
+>
+> v2 新增了完整的「資料生命週期審查」(見第 8 節)。v3 一度把「成員標籤(people)」整個概念拿掉、併入「自訂標籤(tags)」——**這個決定在 v4 被推翻**,復原成「成員」跟「自訂標籤」兩套獨立系統。v4.2 拿掉了成員與餐廳之間唯一的連結(`restaurant_tags`)。v4.3 把「群組」的假資料機制整個拿掉,改成「👥 群組」分頁全部鎖住、家人飲食偏好小抄搬去 ☰ 更多獨立存在。**v5 再翻一次案,把群組做成真的能用的功能**,但用一個新方式解決 v4.3 當時卡住的問題:
 >
 > - **群組(`groups`/`group_members`)重新做成真的功能**。群組底下的每個 member,除了名字/代表色/飲食偏好之外,多一個「已連結/未連結使用者帳號」的狀態欄位(`linked_user_id`)。**未連結**就是原本「家人偏好小抄」的樣子——沒有身份,純粹備忘;**已連結**代表這個 member 對應到一個真的帳號,協作場次建立時會被自動列入邀請。這樣「群組」不再是 v4.3 之前那種拿假資料硬湊的東西,而是「member 可能有身份、也可能還沒有」的誠實名單。目前原型裡沒有真帳號系統,所以 `linked_user_id` 永遠是 null,「連結」這個動作本身還是「尚未開放」的提示——但欄位跟 UI 已經照未來的樣子做出來了。
 > - **原本獨立於群組之外的「家人偏好小抄」整個併入群組**。member 現在一定屬於某個群組,不再有「沒有群組」的家人;群組的 CRUD(建立/改名/刪除)跟 member 的 CRUD(新增/編輯/刪除)都是真的能操作的功能,不是佔位提示。
@@ -17,10 +19,11 @@
 
 ## 0. 給接手者的第一步建議
 
-1. 先讀 `meal-picker.html`,理解目前所有畫面與互動。這個原型是 zero-dependency 的單一 HTML 檔(因為聊天 Artifact 環境會擋外部資源),**這個限制在 Claude Code 環境不存在,可以放心用 React/正式套件重建**。
-2. 原型有個已知問題:`window.storage`(Artifact 儲存 API)在使用者的環境裡持續回報寫入失敗。這不是程式邏輯錯誤,換到 Supabase 之後這個問題自然消失,不需要在原型裡除錯。
-3. **本文件第 8 節的「資料生命週期審查」是這次更新的重點**,裡面记录了十個原本的資料模型會卡死或報錯的地方,以及最後拍板的解法。寫程式前務必先讀那一節,因為它會直接影響 SQL schema 該怎麼寫。
+1. 先讀 `meal-picker.html`,理解目前所有畫面與互動。這個檔案**不再是純原型**——已經是單一 HTML 檔 + `supabase-js`,直接讀寫真的 Supabase 專案,`window.storage`/假資料那一套已經整個拆掉了。
+2. `supabase/migrations/` 底下的 SQL 檔案是**已經在真專案上跑過**的紀錄(不是待辦),照檔名時間序執行過一遍就能重建整個資料庫。`supabase/functions/guest-session/index.ts` 是**已經部署**的 Edge Function。
+3. **本文件第 8 節的「資料生命週期審查」記录了十個原本的資料模型會卡死或報錯的地方**,寫程式前建議先讀過,理解為什麼 schema 長這樣。第 5 節末尾補充了兩個實際串接時才踩到的坑(GRANT 權限),是這十題之外、純技術層面的教訓。
 4. 目標是「用原型的互動邏輯與視覺方向重建成正式產品」,不是複製原型。介面可以優化,但第 7 節的視覺語言是已經迭代多輪確認的方向,調整前建議先跟使用者確認。
+5. **接手前先看第 3、6、9 節確認目前真實的完成度**——不要假設「文件寫的是規劃就代表還沒做」,這份文件已經同步過一次實況。
 
 ---
 
@@ -62,30 +65,29 @@
 
 ---
 
-## 3. 現有原型狀況(對照 meal-picker.html)
+## 3. 現有實作狀況(對照 meal-picker.html,v6:已接上真 Supabase)
 
-> **狀態更新(v5)**:群組從「整頁鎖住的佔位」變成真的能建立/管理的功能;家人偏好小抄併入群組;⭐ 收藏併入 🗺️ 地圖;新增 🧾 點餐分頁。下面的清單是**目前原型的實際狀態**。
+> **狀態更新(v6)**:v5 只做完前端 UI(假資料/`window.storage`)。這次更新把帳號系統、五個核心資料實體、協作場次的真邀請連結全部接上真的 Supabase 專案。下面的清單是**目前真的能動、有真資料庫在背後撐著的狀態**,不再是「畫面預覽」。
 
-已經做出來、邏輯完整、可互動的部分:
-- 5 個分頁:🗺️ 地圖(內含左右切換的「地圖／收藏」)・👥 群組・🎯 決策・🧾 點餐・☰ 更多
-- 餐廳收藏(CRUD 含編輯;地圖定位板;食物類型下拉篩選、自訂標籤下拉篩選,同一列並排),現在收在「地圖」分頁裡用左右分頁切換,不是獨立的上層分頁
-- 每間餐廳可維護:自訂標籤(自由文字)、菜單存放區(常點餐點+價格,可多筆增刪)、菜單照片(多張上傳,原型階段存在瀏覽器記憶體)
-- 👥 群組分頁:真的能建立群組、改名、刪除;點進群組可以新增/編輯/刪除 member,每個 member 顯示「🔓 未連結帳號」或「✅ 已連結帳號」徽章(目前恆為未連結,連結動作是尚未開放提示)、飲食偏好標籤
-- 決策:個人抽籤、系統建議、協作場次(候選/表態合併在同一個子分頁、參與者另一個子分頁 → 轉盤結果)。抽籤與協作場次候選頁的自訂標籤 chip 是**篩選**用途,不是整批匯入
-- 協作場次的「這次要找誰一起決定」畫面兩個選項都能用:「👥 選好友群組」(選一個群組,已連結成員自動列入參與者,未連結的可事後用連結加入)、「🔗 自由邀請」(純用連結,不需要群組)
-- 🧾 點餐分頁:建立一筆點餐可以「從決策紀錄匯入」或「直接選店」,再選「📝 自建成員清單」(單機操作,可從群組匯入成員或自由輸入,自己幫每個人填品項跟價錢,真的能用)、「👥 群組邀點餐」或「🔗 連結發點餐」(多裝置各自輸入,連結功能尚未開放,先預覽接下來的畫面)
-- ☰ 更多分頁有「自訂標籤管理」「食物類型管理」兩個入口,可以改名、刪除、看使用數量
-- 決策結果可輸出成分享圖片(純 Canvas 繪製,是真功能)
+已經接上真資料庫、端到端測過的部分:
+- **帳號系統**:email/password 登入註冊 + Google OAuth(OAuth 目前只能在部署成真網址、或本機起 `http://localhost` 網頁伺服器的情況下用,直接雙擊開檔案會被瀏覽器的 `ERR_UNSAFE_REDIRECT` 擋掉——這是瀏覽器擋 https→file 重新導向的安全機制,不是設定問題)
+- 5 個分頁:🗺️ 地圖(內含左右切換的「地圖／收藏」)・👥 群組・🎯 決策・🧾 點餐・☰ 更多,登入後資料全部從 Supabase 讀
+- 餐廳收藏(CRUD、地圖定位板、食物類型/自訂標籤下拉篩選)、自訂標籤(自由文字)、菜單存放區(常點餐點+價格)、菜單照片(**真的存 Supabase Storage**,長期保存,列表上有 🍴 圖示可以不進編輯頁直接放大看)
+- 👥 群組分頁:群組/member 的 CRUD 全部是真資料庫操作(`groups`/`group_members`);`linked_user_id` 欄位存在但**還沒有實際連結流程**,恆為 null,徽章顯示恆為「未連結」——這件事還沒做(見下方待辦)
+- 自訂食物類型、自訂飲食偏好(`custom_categories`/`custom_prefs`):改名/刪除會連動批次更新用到的餐廳/成員資料,真資料庫操作
+- 決策:個人抽籤、系統建議會寫入 `decision_history`;**協作場次現在有真的邀請連結**——owner 建立場次時產生真 `invite_token`,訪客不用帳號、透過連結呼叫 `guest-session` Edge Function 就能加入、投票、新增候選、標記完成,owner 端每 3 秒 poll 一次同步訪客的操作,截止時間到會自動結算並寫入 `decision_history`(結算判斷邏輯本身沒變,見第 6 節)
+- 🧾 點餐分頁:「自建成員清單」模式是真資料庫操作(`orders`/`order_items`),「從群組匯入成員」也是真的
+- ☰ 更多分頁的「自訂標籤管理」「食物類型管理」都是真資料庫操作
+- 決策結果輸出分享圖片(純 Canvas 繪製,不需要後端)
 
-明確是 placeholder、需要在 Claude Code 補上真功能的部分:
-- 帳號系統、`linked_user_id` 真的能連結、多裝置即時同步
-- 協作場次/點餐的邀請連結真的能產生、能分享
-- 「群組邀點餐」「連結發點餐」的多裝置各自輸入(目前落地在跟自建成員清單一樣的畫面,單機代填)
-- 隱私權政策/服務條款/帳號設定/意見回饋(各自有客製化的「尚未開放」提示文字)
+**還沒做、需要接手者繼續的部分**:
+- **排程結算/清理**(第 6 節「逾時觸發機制」的 A 保底):目前只有前端輪詢偵測(B),沒有伺服器端的 Scheduled Function/`pg_cron`。代表如果所有人都關掉分頁,已經到期的場次不會自動結算,也不會有東西幫忙清除過期場次(`cleanup_after` 這個機制還沒實作)
+- **把 app 部署到真的網址**(Vercel/Netlify 之類):目前還是本機 `file://` 檔案,邀請連結只能同一台電腦上的不同分頁互開,無法真的分享給不同裝置的人。這也是 Google OAuth 目前用不了的同一個根因
+- `group_members.linked_user_id` 真的能連結(「連結帳號」目前還是 UI 上的「尚未開放」提示)
+- 「群組邀點餐」「連結發點餐」的多裝置各自輸入(目前落地在跟自建成員清單一樣的畫面,單機代填)——**可以參考這次協作場次邀請連結的做法**(`guest-session` Edge Function 的 token 驗證模式)直接套用,不需要重新設計
+- 隱私權政策/服務條款/意見回饋(各自有客製化的「尚未開放」提示文字)
 - Google 地圖真實店家搜尋(API 金鑰不能放前端,暫不內建)
-- 菜單照片的長期保存(要接 Supabase Storage)
-
-**注意**:協作場次原本原型裡有「模擬新增訪客」「立即結算(測試用)」幾顆 demo/假機制按鈕方便單機測試,都已經拿掉(正式版靠真實邀請連結 + 第 6 節的排程雙保險結算)。這代表**這個原型現在沒有辦法在瀏覽器裡端到端測試「有人加入協作場次」的流程**,只能測試候選/表態/倒數這幾塊,要等 Tier 2 接上真帳號與邀請連結才能完整測試。點餐的「群組邀點餐/連結發點餐」同理。
+- 「加為好友/存進群組」(協作場次結果畫面,第 8 節問題 9 提到的功能)
 
 ---
 
@@ -130,10 +132,14 @@
 ```
 users(帳號)
   └─ 擁有 groups(群組)、restaurants(收藏)、decision_history(歷史)、
-     decision_sessions(場次)、custom_categories(自訂食物類型)、orders(點餐)
+     decision_sessions(場次)、custom_categories(自訂食物類型)、
+     custom_prefs(自訂飲食偏好)、orders(點餐)
 
 custom_categories(帳號自己新增的食物類型,跟前端寫死的 8 種預設類型並存)
   └─ 不對 restaurants.category 設外鍵,靠文字比對關聯,改名/刪除時應用層批次更新
+
+custom_prefs(帳號自己新增的飲食偏好,跟前端寫死的 7 種預設偏好並存)
+  └─ 不對 group_members.prefs 設外鍵,同樣靠文字比對,改名/刪除時應用層批次更新
 
 groups(帳號自己的群組,例如「家人」「公司同事」)
   └─ group_members(群組成員,結構化資料:名字/顏色/飲食偏好/linked_user_id)
@@ -142,8 +148,10 @@ groups(帳號自己的群組,例如「家人」「公司同事」)
 
 restaurants(餐廳,屬於某個 user)
   ├─ custom_tags:text[] 欄位,完全自由的文字標籤,唯一的「誰喜歡/什麼場合」備註管道
+  ├─ x/y:目前這版「假地圖格線板」在用的 0-100 相對座標(v6 補充,見下方 SQL 註解)
   ├─ restaurant_menu_items:餐廳的常點餐點清單(一對多,文字+價格)
-  └─ restaurant_photos:餐廳的菜單照片(一對多,跟上面文字清單疊加,不是取代)
+  └─ restaurant_photos:餐廳的菜單照片(一對多,跟上面文字清單疊加,不是取代;
+     **v6:真的存 Supabase Storage,public bucket `restaurant-photos`**)
 
 decision_history(決策歷史,屬於某個 user)
 
@@ -194,11 +202,13 @@ create table restaurants (
   category text not null,
   price smallint check (price between 1 and 3),
   note text,
-  lat double precision,  -- 真經緯度,原型的相對座標(x/y%)不搬過來,一開始留空
+  lat double precision,  -- 真經緯度,留給以後真的接 Google 地圖
   lng double precision,
   favorite boolean default false,
   custom_tags text[] default '{}',  -- 完全自由的文字標籤,不參照 group_members,系統不解析內容
-  created_at timestamptz default now()
+  created_at timestamptz default now(),
+  x double precision,    -- v6 補充:目前這版「假地圖格線板」在用的 0-100 相對座標,
+  y double precision      -- 跟 lat/lng(真經緯度)不是同一件事,不要合併
 );
 
 -- 菜單存放區:常點的餐點及價格,一間餐廳可有多筆
@@ -221,6 +231,15 @@ create table restaurant_photos (
 
 -- 使用者自訂的食物類型,跟前端寫死的 8 種預設類型並存;預設類型不進資料庫
 create table custom_categories (
+  id uuid primary key default gen_random_uuid(),
+  owner_user_id uuid references auth.users(id) on delete cascade not null,
+  name text not null,
+  created_at timestamptz default now(),
+  unique (owner_user_id, name)
+);
+
+-- 使用者自訂的飲食偏好,跟前端寫死的 7 種預設偏好並存;預設偏好不進資料庫
+create table custom_prefs (
   id uuid primary key default gen_random_uuid(),
   owner_user_id uuid references auth.users(id) on delete cascade not null,
   name text not null,
@@ -305,7 +324,21 @@ create table order_items (
 );
 ```
 
-啟用 Row Level Security,`owner_user_id = auth.uid()` 是基本擁有者規則(`groups`、`orders` 也適用;`group_members` 透過 `group_id` 關聯回 `groups` 判斷擁有者,`order_items` 透過 `order_id` 關聯回 `orders`)。`restaurant_menu_items`/`restaurant_photos` 同理透過 `restaurant_id` 關聯回 `restaurants` 判斷擁有者。菜單照片建議直接用 Supabase Storage 存檔案本體,`storage_path` 只存路徑。`restaurants.category` 維持純文字欄位、不對 `custom_categories` 設外鍵,改名/刪除自訂類型時由應用層邏輯批次更新符合的 `restaurants.category` 文字值,做法比照 `decision_history.restaurant_name` 的文字備份模式。`decision_sessions`/`session_participants`/`session_pool`/`session_votes`/`orders`/`order_items` 這幾張表因為訪客沒有帳號,需要另外設計「憑 `invite_token` 換取有限寫入權限」的規則(建議透過一個 Edge Function 驗證 token 沒過期,再用 service role 代為寫入,不要讓訪客直接拿到能繞過 RLS 的權限)。`group_members.linked_user_id` 的寫入(也就是「連結帳號」這個動作)建議也走 Edge Function,驗證雙方同意後才設定,不要讓任何一方單方面把別人的 `auth.users.id` 填進來。
+啟用 Row Level Security,`owner_user_id = auth.uid()` 是基本擁有者規則(`groups`、`orders` 也適用;`group_members` 透過 `group_id` 關聯回 `groups` 判斷擁有者,`order_items` 透過 `order_id` 關聯回 `orders`)。`restaurant_menu_items`/`restaurant_photos` 同理透過 `restaurant_id` 關聯回 `restaurants` 判斷擁有者。`restaurants.category` 維持純文字欄位、不對 `custom_categories` 設外鍵,改名/刪除自訂類型時由應用層邏輯批次更新符合的 `restaurants.category` 文字值,做法比照 `decision_history.restaurant_name` 的文字備份模式;`group_members.prefs` 對 `custom_prefs` 也是同一套做法。`decision_sessions`/`session_participants`/`session_pool`/`session_votes` 訪客沒有帳號,靠 `invite_token` 換取有限寫入權限,不開放 RLS 給匿名角色。`group_members.linked_user_id` 的寫入(「連結帳號」這個動作)還沒實作,之後做的話建議走 Edge Function、驗證雙方同意後才設定,不要讓任何一方單方面把別人的 `auth.users.id` 填進來。
+
+**v6:以上這段已經全部真的做出來了**,實際檔案在 `supabase/migrations/`(照檔名時間序執行):
+- `20260816000000_v5_schema.sql` — 上面這份完整 schema(不含 v6 才加的 `x`/`y`,那個在後面的檔案裡補)
+- `20260816000001_v5_rls_policies.sql` — 每張表的 owner-only RLS policy(`decision_history` 沒有 UPDATE policy,刻意設計成不可修改的歷史紀錄)
+- `20260816000002_v5_storage.sql` — `restaurant-photos` public bucket + `storage.objects` 的上傳/刪除權限(路徑第一層資料夾必須是自己的 `auth.uid()`)
+- `20260816000003_v5_restaurant_xy.sql` — 補 `restaurants.x`/`y`
+- `20260816000004_v5_grants.sql` — 補 `authenticated` 角色的 GRANT
+- `20260817000000_v5_service_role_grants.sql` — 補 `service_role` 角色的 GRANT
+
+**兩個實際串接時才踩到的坑,第 8 節十題審查沒預料到,值得記錄**:
+1. **用 SQL Editor 手動 `CREATE TABLE`,不會自動套用 Supabase 預設的角色權限**(不管是 `authenticated` 還是 `service_role`)——這跟透過 Table Editor UI 建表的行為不一樣。RLS policy 只負責「篩選看得到哪些 row」,底層 `GRANT SELECT/INSERT/...` 是完全獨立的一層,兩者都要有,少一個就會被 Postgres 擋成 `42501 permission denied`,即使程式邏輯跟 RLS policy 都寫對了。這是 `20260816000004`/`20260817000000` 兩個補充 migration 存在的原因。
+2. **`service_role` 天生繞過 RLS,但不代表天生有 GRANT**——這兩者常被誤以為是同一件事,實際上是兩層獨立的權限機制,`guest-session` Edge Function 用 `service_role` 存取資料庫時一樣需要上面第 1 點的 GRANT。
+
+**訪客邀請連結的真實做法(v6,已實作)**:`supabase/functions/guest-session/index.ts` 是一個 Deno Edge Function,用 `service_role` 繞過 RLS,但每個動作都先驗證 `invite_token` 對應到哪個場次、場次還在 `collecting` 狀態且沒過期,確保訪客只能碰自己被邀請的那個場次。支援 `join`(加入,拿到 `participantId`)、`state`(讀取候選/表態/參與者現況,前端每 3 秒 poll 一次)、`addCandidate`、`vote`、`toggleReady` 五個動作,全部走同一個 endpoint、body 帶 `action` 欄位區分。部署方式:Supabase Dashboard → Edge Functions → Via Editor,貼上整份程式碼、Deploy,JWT 驗證維持預設開啟(前端呼叫時帶 anon key 當 `Authorization`,場次層級的授權另外靠 body 裡的 `token` 檢查,兩層互不影響)。
 
 ---
 
@@ -339,9 +372,9 @@ create table order_items (
 10. 緩衝時間過後,由排程任務整個刪除場次(參與者/候選/表態全部隨 CASCADE 一併清除)
 ```
 
-### 逾時觸發機制(A+B 雙保險,已定案)
-- **A(排程保底)**:Supabase Scheduled Function,每 1 分鐘掃描一次 `decision_sessions`,找出 `status in ('collecting','waiting') and deadline_at <= now()` 的場次,依上方第 8 步結算;同時掃描 `status in ('done','no_result') and cleanup_after <= now()` 的場次執行刪除。就算所有人都沒開著頁面,場次也會準時結算跟清除,只有最多 1 分鐘的誤差。
-- **B(前端主動檢查)**:任何人打開場次畫面時,前端比對目前時間是否已超過 `deadline_at`,超過的話呼叫跟排程一樣的結算邏輯,讓「剛好有人在看」的情況能更即時反應,不用等排程的下一次執行。
+### 逾時觸發機制(A+B 雙保險,已定案;**v6:只有 B 做出來了,A 還沒做**)
+- **A(排程保底)—— ⚠️ 還沒實作**:規劃是 Supabase Scheduled Function,每 1 分鐘掃描一次 `decision_sessions`,找出 `status in ('collecting','waiting') and deadline_at <= now()` 的場次,依上方第 8 步結算;同時掃描 `status in ('done','no_result') and cleanup_after <= now()` 的場次執行刪除。**目前完全沒有這一層**,代表如果所有人都關掉分頁,已經到期的場次會卡在 `collecting` 狀態不會自動結算,`cleanup_after` 這個欄位目前也沒有任何東西在讀它。這是 Tier 2 剩下最重要的一塊,見第 9 節路線圖。
+- **B(前端主動檢查)—— ✅ 已實作**:owner 開著場次進行中畫面時,前端每秒檢查一次是否已超過 `deadline_at`,超過就在瀏覽器端呼叫結算邏輯(`collabSettle()`),同時每 3 秒 poll 一次 `session_pool`/`session_votes`/`session_participants` 同步訪客的操作。這代表**目前只有「owner 剛好開著頁面」的情況會準時結算**,單純 B 沒有 A 保底,不能算是完整方案。
 
 ### 點餐流程(v5 新增)
 
@@ -414,22 +447,27 @@ Tier 2 如果要做到「群組邀點餐/連結發點餐」真的多裝置各自
 
 | 階段 | 內容 | 狀態 |
 |---|---|---|
-| Tier 0 | 單人模式,基本五分頁功能 | ✅ 原型已完成 |
-| Tier 1 | 協作場次 UI 全部蓋完,未串接後端功能先做空按鈕 | ✅ 原型已完成 |
-| Tier 1.5 | UI/UX 檢視與優化(編輯功能補完、協作場次畫面重構、一致性修正) | ✅ 原型已完成 |
-| Tier 1.6 | 群組/member 復活(已連結/未連結狀態)、地圖收藏合併、新增點餐分頁 | ✅ 原型已完成(v5) |
-| **Tier 2(交給 Claude Code)** | **接上 Supabase:真帳號(Auth)、真資料庫(第 5 節 schema)、排程結算(第 6 節)、Realtime 同步、邀請連結真的能用、`linked_user_id` 真的能連結** | 🔜 下一步 |
+| Tier 0 | 單人模式,基本五分頁功能 | ✅ 已完成 |
+| Tier 1 | 協作場次 UI 全部蓋完,未串接後端功能先做空按鈕 | ✅ 已完成 |
+| Tier 1.5 | UI/UX 檢視與優化(編輯功能補完、協作場次畫面重構、一致性修正) | ✅ 已完成 |
+| Tier 1.6 | 群組/member 復活(已連結/未連結狀態)、地圖收藏合併、新增點餐分頁 | ✅ 已完成(v5) |
+| **Tier 2(接 Supabase)** | 真帳號(Auth:email/password + Google OAuth)、真資料庫(第 5 節 schema 全部跑上真專案)、五個核心資料實體真的讀寫、**協作場次真邀請連結**(`guest-session` Edge Function,訪客不用帳號) | ✅ **大部分完成(v6)**,細節見第 3 節 |
+| Tier 2 殘留項 | 排程結算/清理(第 6 節機制 A,伺服器端保底)、`linked_user_id` 真的能連結、群組邀點餐/連結發點餐的多裝置各自輸入(可套用 guest-session 的 token 驗證模式) | 🔜 下一步 |
 | Tier 3 | 拍照記錄三餐、AI 估算熱量、依歷史自動排除重複類型 | 未來 |
-| Tier 4 | 正式部署(Vercel/Netlify),取得正式網址 | 未來 |
+| Tier 4 | 正式部署(Vercel/Netlify),取得正式網址——**這件事其實比 Tier 3 更急**,因為邀請連結、Google OAuth 目前都被「還是本機檔案」卡住,見第 3 節 | 未來,但優先順序應該提前 |
 
-**為什麼選 Supabase**:關聯式資料庫對應「帳號→群組/餐廳→決策場次/點餐」的關聯結構;內建 Auth 解決帳號(也是 `linked_user_id` 能真的動起來的前提);內建 Realtime 解決協作場次與點餐的即時同步;Scheduled Functions/`pg_cron` 解決第 8 節的逾時排程需求,不用另外架服務。免費層額度(500MB DB、5 萬月活躍用戶、200 個並發 Realtime 連線)對這個規模綽綽有餘,唯一要注意免費專案連續 7 天沒存取會自動暫停(資料還在,手動喚醒即可)。
+**為什麼選 Supabase**:關聯式資料庫對應「帳號→群組/餐廳→決策場次/點餐」的關聯結構;內建 Auth 解決帳號(也是 `linked_user_id` 能真的動起來的前提);Scheduled Functions/`pg_cron` 解決第 8 節的逾時排程需求(**還沒接**,見上方 Tier 2 殘留項),不用另外架服務。免費層額度(500MB DB、5 萬月活躍用戶)對這個規模綽綽有餘,唯一要注意免費專案連續 7 天沒存取會自動暫停(資料還在,手動喚醒即可)。
+
+**v6 補充**:原本規劃協作場次/點餐的多裝置同步要用 Supabase Realtime,實際做 `guest-session` 時**改用輪詢(每 3 秒 poll 一次)**,不是 Realtime 訂閱——因為 RLS 設計是 owner-only,訪客是匿名角色,沒辦法直接訂閱 Realtime channel(那需要通過 RLS 的角色權限),要嘛開放匿名 RLS(不符合第 5 節的安全設計),要嘛簽發限定範圍的自訂 JWT(複雜度高,對這個規模不划算)。輪詢對這個使用情境(場次通常幾分鐘到幾小時,不需要毫秒級即時)已經夠用,之後如果真的想換成 Realtime,需要重新設計訪客端的授權模式,不是換個 API 呼叫就好。
 
 ---
 
 ## 10. 交付檔案清單
 
-- `meal-picker.html` — 目前唯一可執行的原型,UI/互動邏輯的參考起點,已套用 v5 設計
+- `meal-picker.html` — 唯一可執行的檔案,已接上真 Supabase(不再是純原型),UI/互動邏輯的參考起點
 - `CLAUDE_CODE_專案交接文件.md`(本文件)— 資料庫、帳號、排程、路線圖、第 8 節生命週期審查
+- `supabase/migrations/*.sql` — **已經在真專案上執行過**的 SQL,照檔名時間序執行可重建整個資料庫,清單見第 5 節
+- `supabase/functions/guest-session/index.ts` — **已部署**的 Edge Function,協作場次訪客邀請連結的後端邏輯,見第 5 節說明
 - `補充-UIUX優化定案.md` — UI/UX 檢視問題清單與定案結果,已全部做進原型
 - `補充-食物類型擴充定案.md` — 食物類型可自訂擴充的定案結果
 
