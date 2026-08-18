@@ -2084,20 +2084,26 @@
     var totalMin = Math.floor(remain / 60000);
     var days = Math.floor(totalMin / 1440), hours = Math.floor((totalMin % 1440) / 60), mins = totalMin % 60;
     var remainStr = days > 0 ? (days + "天" + hours + "小時") : (hours > 0 ? (hours + "小時" + mins + "分") : (mins + "分鐘"));
-    var timeRow = el("div", { style: "display:flex;justify-content:space-between;align-items:center" });
-    timeRow.appendChild(el("div", { class: "sectionLabel mono", style: "margin:0" }, "距離截止 " + formatDeadlineDisplay(state.collab.deadlineAt) + " 還剩 " + remainStr));
+    frag.appendChild(el("div", { class: "sectionLabel mono", style: "margin:0" }, "距離截止 " + formatDeadlineDisplay(state.collab.deadlineAt) + " 還剩 " + remainStr));
+
+    var actionRow = el("div", { style: "display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;" });
     var cancelBtn = el("button", { style: "background:none;border:none;color:#B23A2E;font-size:12px;cursor:pointer;padding:2px 4px;" }, "✕ 取消場次");
     cancelBtn.onclick = collabCancelSession;
-    timeRow.appendChild(cancelBtn);
-    frag.appendChild(timeRow);
-
-    var copyLinkBtn = el("button", { class: "ghostBtn", style: "margin:8px 0 0;" }, "🔗 複製邀請連結");
+    actionRow.appendChild(cancelBtn);
+    if (state.collab.ownerParticipantId) {
+      var readyBtn = el("button", { class: "ghostBtn" }, state.collab.ownerReady ? "點一下未完成" : "點一下已完成");
+      if (state.collab.ownerReady) readyBtn.style.color = "#5C7A6B";
+      readyBtn.onclick = collabToggleReady;
+      actionRow.appendChild(readyBtn);
+    }
+    var copyLinkBtn = el("button", { class: "ghostBtn" }, "🔗 複製邀請連結");
     copyLinkBtn.onclick = function () {
       if (!state.collab.inviteToken) { showToast("連結還在產生中,請稍等一下再試"); return; }
       var linkUrl = location.href.split("?")[0].split("#")[0] + "?join=" + state.collab.inviteToken;
       navigator.clipboard.writeText(linkUrl).then(function () { showToast("已複製連結"); }).catch(function () { showToast("複製失敗,請手動選取文字複製"); });
     };
-    frag.appendChild(copyLinkBtn);
+    actionRow.appendChild(copyLinkBtn);
+    frag.appendChild(actionRow);
 
     var seg = el("div", { class: "segControl" });
     [["candidates", "候選 / 表態"], ["participants", "參與者(" + state.collab.participants.length + ")"]].forEach(function (pair) {
@@ -2201,12 +2207,6 @@
   function renderCollabParticipantsTab() {
     var wrap = document.createDocumentFragment();
     wrap.appendChild(el("div", { class: "excludeNote" }, "參與者清單選填,主要給彼此心安,真正結算只看截止時間到了沒有"));
-    if (state.collab.ownerParticipantId) {
-      var readyBtn = el("button", { class: "ghostBtn", style: "margin-bottom:10px;" }, state.collab.ownerReady ? "✅ 已完成(點一下取消)" : "點這裡標記已完成");
-      if (state.collab.ownerReady) readyBtn.style.color = "#5C7A6B";
-      readyBtn.onclick = collabToggleReady;
-      wrap.appendChild(readyBtn);
-    }
     var pCard = el("div", { class: "card" });
     state.collab.participants.forEach(function (p) {
       var row = el("div", { class: "row" });
