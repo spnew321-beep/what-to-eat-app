@@ -2091,6 +2091,14 @@
     timeRow.appendChild(cancelBtn);
     frag.appendChild(timeRow);
 
+    var copyLinkBtn = el("button", { class: "ghostBtn", style: "margin:8px 0 0;" }, "🔗 複製邀請連結");
+    copyLinkBtn.onclick = function () {
+      if (!state.collab.inviteToken) { showToast("連結還在產生中,請稍等一下再試"); return; }
+      var linkUrl = location.href.split("?")[0].split("#")[0] + "?join=" + state.collab.inviteToken;
+      navigator.clipboard.writeText(linkUrl).then(function () { showToast("已複製連結"); }).catch(function () { showToast("複製失敗,請手動選取文字複製"); });
+    };
+    frag.appendChild(copyLinkBtn);
+
     var seg = el("div", { class: "segControl" });
     [["candidates", "候選 / 表態"], ["participants", "參與者(" + state.collab.participants.length + ")"]].forEach(function (pair) {
       var b = el("button", { class: "segBtn" + (state.collab.activeSubTab === pair[0] ? " active" : "") }, pair[1]);
