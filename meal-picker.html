@@ -1229,6 +1229,9 @@
     var el = document.activeElement;
     return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT");
   }
+  function isCollabActiveScreenVisible() {
+    return state.tab === "決策" && state.decMode === "協作場次" && state.collab.step === "active";
+  }
   function collabActiveTick() {
     if (state.collab.step !== "active") { clearInterval(collabTimerHandle); collabTimerHandle = null; return; }
     if (state.confirmDialog || state.textPromptDialog) return;
@@ -1239,7 +1242,7 @@
     }
     collabPollCounter++;
     if (collabPollCounter % 3 === 0) collabPollActive();
-    if (!isFormFieldFocused()) render();
+    if (!isFormFieldFocused() && isCollabActiveScreenVisible()) render();
   }
   function mapPoolItem(item) {
     var r = item.restaurant_id ? restaurantById(item.restaurant_id) : null;
@@ -1276,7 +1279,7 @@
           state.collab.ownerReady = ownerRow.ready;
         }
       }
-      if (!isFormFieldFocused()) render();
+      if (!isFormFieldFocused() && isCollabActiveScreenVisible()) render();
     });
   }
   function collabToggleRestaurant(restaurantId) {
