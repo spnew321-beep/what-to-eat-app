@@ -1136,8 +1136,16 @@
       audienceGroupId: null,
       participants: [], pool: [], votes: {}, winner: null, noResult: false, spinning: false,
       adhocForm: { name: "", category: CATEGORIES[0] }, browseOpen: false, tagFilter: null,
-      activeSubTab: "candidates", sessionId: null, inviteToken: null
+      activeSubTab: "candidates", sessionId: null, inviteToken: null,
+      ownerParticipantId: null, ownerReady: false
     };
+  }
+  function collabOwnerDisplayName() {
+    var u = state.session && state.session.user;
+    if (!u) return "我";
+    if (u.user_metadata && u.user_metadata.full_name) return u.user_metadata.full_name;
+    if (u.email) return u.email.split("@")[0];
+    return "我";
   }
   function collabCancelSession() {
     showConfirm("確定要取消這個協作場次嗎?目前的候選、表態都會清掉,不會產生任何結果。", function () {
@@ -1192,6 +1200,21 @@
       state.collab.sessionId = res.data[0].id;
       state.collab.inviteToken = res.data[0].invite_token;
       render();
+      sb.from('session_participants').insert({
+        session_id: state.collab.sessionId, user_id: state.session.user.id,
+        display_name: collabOwnerDisplayName(), is_guest: false
+      }).select().then(function (pRes) {
+        if (pRes.error || !pRes.data || !pRes.data[0]) return;
+        state.collab.ownerParticipantId = pRes.data[0].id;
+      });
+    });
+  }
+  function collabToggleReady() {
+    if (!state.collab.ownerParticipantId) return;
+    state.collab.ownerReady = !state.collab.ownerReady;
+    render();
+    sb.from('session_participants').update({ ready: state.collab.ownerReady }).eq('id', state.collab.ownerParticipantId).then(function (res) {
+      if (res.error) { state.collab.ownerReady = !state.collab.ownerReady; showToast("更新失敗,請檢查網路後再試一次"); render(); }
     });
   }
   function collabEnterActive() {
@@ -1247,6 +1270,11 @@
         state.collab.participants = partRes.data.map(function (p, idx) {
           return { id: p.id, name: p.display_name, color: PERSON_COLORS[idx % PERSON_COLORS.length], isGuest: p.is_guest, ready: p.ready };
         });
+        var ownerRow = partRes.data.filter(function (p) { return p.user_id === state.session.user.id; })[0];
+        if (ownerRow) {
+          state.collab.ownerParticipantId = ownerRow.id;
+          state.collab.ownerReady = ownerRow.ready;
+        }
       }
       if (!isFormFieldFocused()) render();
     });
@@ -2165,6 +2193,12 @@
   function renderCollabParticipantsTab() {
     var wrap = document.createDocumentFragment();
     wrap.appendChild(el("div", { class: "excludeNote" }, "參與者清單選填,主要給彼此心安,真正結算只看截止時間到了沒有"));
+    if (state.collab.ownerParticipantId) {
+      var readyBtn = el("button", { class: "ghostBtn", style: "margin-bottom:10px;" }, state.collab.ownerReady ? "✅ 已完成(點一下取消)" : "點這裡標記已完成");
+      if (state.collab.ownerReady) readyBtn.style.color = "#5C7A6B";
+      readyBtn.onclick = collabToggleReady;
+      wrap.appendChild(readyBtn);
+    }
     var pCard = el("div", { class: "card" });
     state.collab.participants.forEach(function (p) {
       var row = el("div", { class: "row" });
