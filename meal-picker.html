@@ -221,10 +221,10 @@
   .colorDot { width: 28px; height: 28px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; }
   .colorDot.active { border-color: #232019; }
 
-  .menuItemRow { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
-  .menuItemRow input.miName { flex: 1; border: 1px solid #C9BFA5; background: #FFFDF7; border-radius: 8px; padding: 8px 10px; font-size: 14px; color: #232019; font-family: inherit; }
-  .menuItemRow input.miPrice { width: 76px; border: 1px solid #C9BFA5; background: #FFFDF7; border-radius: 8px; padding: 8px 10px; font-size: 14px; color: #232019; font-family: inherit; }
-  .menuItemRow button.miRemove { background: none; border: none; color: #B23A2E; font-size: 16px; cursor: pointer; padding: 4px 6px; }
+  .menuItemRow { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
+  .menuItemRow input.miName { flex: 1; min-width: 60px; border: 1px solid #C9BFA5; background: #FFFDF7; border-radius: 8px; padding: 8px 10px; font-size: 14px; color: #232019; font-family: inherit; }
+  .menuItemRow input.miPrice { width: 76px; flex-shrink: 0; border: 1px solid #C9BFA5; background: #FFFDF7; border-radius: 8px; padding: 8px 10px; font-size: 14px; color: #232019; font-family: inherit; }
+  .menuItemRow button.miRemove { background: none; border: none; color: #B23A2E; font-size: 16px; cursor: pointer; padding: 4px 6px; flex-shrink: 0; }
   .addRowBtn { border: 1px dashed #C9BFA5; background: transparent; color: #5C7A6B; border-radius: 8px; padding: 8px 12px; font-size: 13px; cursor: pointer; width: 100%; text-align: center; }
   .photoThumbGrid { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
   .photoThumb { position: relative; width: 64px; height: 64px; border-radius: 8px; overflow: hidden; border: 1px solid #C9BFA5; }
