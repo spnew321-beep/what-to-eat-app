@@ -3084,9 +3084,19 @@
   function guestAddCandidate() {
     var name = guestState.adhocForm.name.trim();
     if (!name) return;
+    var category = guestState.adhocForm.category;
     guestState.adhocForm.name = "";
-    guestCall("addCandidate", { name: name, category: guestState.adhocForm.category }).then(function (r) {
-      if (r.status === 200) guestPoll(); else { guestState.error = r.body.error || "新增失敗"; renderGuest(); }
+    var tempItem = { id: uid(), restaurantId: null, name: name, category: category, price: null, isAdhoc: true, accept: 0, reject: 0, myVote: null };
+    guestState.pool = guestState.pool.concat([tempItem]);
+    renderGuest();
+    guestCall("addCandidate", { name: name, category: category }).then(function (r) {
+      if (r.status === 200) {
+        if (r.body && r.body.id) tempItem.id = r.body.id;
+      } else {
+        guestState.pool = guestState.pool.filter(function (x) { return x.id !== tempItem.id; });
+        guestState.error = r.body.error || "新增失敗,請再試一次";
+        renderGuest();
+      }
     });
   }
   function renderGuest() {

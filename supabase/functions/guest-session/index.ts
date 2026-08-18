@@ -131,14 +131,18 @@ Deno.serve(async (req) => {
     const name = String(body.name || "").trim().slice(0, 60);
     if (!name) return json({ error: "請輸入店名" }, 400);
     const category = String(body.category || "其他").slice(0, 20);
-    const { error } = await admin.from("session_pool").insert({
-      session_id: session.id,
-      adhoc_name: name,
-      adhoc_category: category,
-      added_by_participant_id: participantId,
-    });
-    if (error) return json({ error: "新增失敗,請再試一次" }, 500);
-    return json({ ok: true });
+    const { data, error } = await admin
+      .from("session_pool")
+      .insert({
+        session_id: session.id,
+        adhoc_name: name,
+        adhoc_category: category,
+        added_by_participant_id: participantId,
+      })
+      .select()
+      .single();
+    if (error || !data) return json({ error: "新增失敗,請再試一次" }, 500);
+    return json({ ok: true, id: data.id });
   }
 
   if (action === "vote") {
